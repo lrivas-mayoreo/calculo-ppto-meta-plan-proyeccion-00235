@@ -10,55 +10,61 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Calculator } from "lucide-react";
+import { Calculator, Upload } from "lucide-react";
 import { toast } from "sonner";
+import type { MarcaPresupuesto } from "@/pages/Index";
 
 interface BudgetFormProps {
   onCalculate: (
     marca: string,
-    articulo: string,
-    mesDestino: number,
+    mesDestino: string,
     presupuesto: number,
-    mesesReferencia: number[]
+    mesesReferencia: string[]
   ) => void;
   mockData: {
     marcas: string[];
     articulos: Record<string, string[]>;
   };
+  mesesDisponibles: string[];
+  onMarcasPresupuestoLoad: (marcas: MarcaPresupuesto[]) => void;
 }
 
-const MESES = [
-  "Enero",
-  "Febrero",
-  "Marzo",
-  "Abril",
-  "Mayo",
-  "Junio",
-  "Julio",
-  "Agosto",
-  "Septiembre",
-  "Octubre",
-  "Noviembre",
-  "Diciembre",
-];
-
-export const BudgetForm = ({ onCalculate, mockData }: BudgetFormProps) => {
+export const BudgetForm = ({ onCalculate, mockData, mesesDisponibles, onMarcasPresupuestoLoad }: BudgetFormProps) => {
   const [marca, setMarca] = useState("");
-  const [articulo, setArticulo] = useState("");
   const [mesDestino, setMesDestino] = useState("");
   const [presupuesto, setPresupuesto] = useState("");
-  const [mesesReferencia, setMesesReferencia] = useState<number[]>([]);
+  const [mesesReferencia, setMesesReferencia] = useState<string[]>([]);
 
-  const handleMesToggle = (mesNum: number) => {
+  const handleMesToggle = (mesAnio: string) => {
     setMesesReferencia((prev) =>
-      prev.includes(mesNum) ? prev.filter((m) => m !== mesNum) : [...prev, mesNum]
+      prev.includes(mesAnio) ? prev.filter((m) => m !== mesAnio) : [...prev, mesAnio]
     );
+  };
+
+  const handleExcelUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Simulación de carga de Excel
+    // En producción, usarías una librería como xlsx para parsear el archivo
+    toast.info("Procesando archivo Excel...");
+    
+    setTimeout(() => {
+      // Datos simulados del Excel
+      const marcasFromExcel: MarcaPresupuesto[] = [
+        { marca: "Nike", presupuesto: 50000 },
+        { marca: "Adidas", presupuesto: 45000 },
+      ];
+
+      onMarcasPresupuestoLoad(marcasFromExcel);
+      toast.success("Archivo Excel cargado correctamente");
+    }, 1000);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!marca || !articulo || !mesDestino || !presupuesto) {
+    if (!marca || !mesDestino || !presupuesto) {
       toast.error("Por favor complete todos los campos obligatorios");
       return;
     }
@@ -74,11 +80,33 @@ export const BudgetForm = ({ onCalculate, mockData }: BudgetFormProps) => {
       return;
     }
 
-    onCalculate(marca, articulo, parseInt(mesDestino), presupuestoNum, mesesReferencia);
-    toast.success("Cálculo realizado exitosamente");
+    try {
+      onCalculate(marca, mesDestino, presupuestoNum, mesesReferencia);
+      
+      // Calcular y mostrar promedio de ventas de meses seleccionados
+      const ventasPorMes = mesesReferencia.map(mesAnio => {
+        let totalMes = 0;
+        mockData.marcas.forEach(m => {
+          if (m === marca) {
+            // Simular suma de ventas (en producción vendría de los datos reales)
+            totalMes += Math.floor(Math.random() * 50000) + 30000;
+          }
+        });
+        return totalMes;
+      });
+      
+      const promedioVentas = ventasPorMes.reduce((a, b) => a + b, 0) / ventasPorMes.length;
+      
+      toast.success(
+        `Cálculo realizado exitosamente. Promedio de ventas de ${mesesReferencia.length} meses: $${promedioVentas.toLocaleString("es-ES", {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        })}`
+      );
+    } catch (error) {
+      toast.error((error as Error).message);
+    }
   };
-
-  const articulosDisponibles = marca ? mockData.articulos[marca] || [] : [];
 
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
@@ -87,11 +115,27 @@ export const BudgetForm = ({ onCalculate, mockData }: BudgetFormProps) => {
       </div>
 
       <div className="space-y-2">
+        <Label htmlFor="excel-upload">Cargar Excel (Opcional)</Label>
+        <div className="flex gap-2">
+          <Input
+            id="excel-upload"
+            type="file"
+            accept=".xlsx,.xls"
+            onChange={handleExcelUpload}
+            className="cursor-pointer"
+          />
+          <Button type="button" variant="outline" size="icon">
+            <Upload className="h-4 w-4" />
+          </Button>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Formato: Columnas "Marca" y "Presupuesto"
+        </p>
+      </div>
+
+      <div className="space-y-2">
         <Label htmlFor="marca">Marca *</Label>
-        <Select value={marca} onValueChange={(value) => {
-          setMarca(value);
-          setArticulo("");
-        }}>
+        <Select value={marca} onValueChange={setMarca}>
           <SelectTrigger id="marca">
             <SelectValue placeholder="Seleccione una marca" />
           </SelectTrigger>
@@ -106,31 +150,15 @@ export const BudgetForm = ({ onCalculate, mockData }: BudgetFormProps) => {
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="articulo">Artículo *</Label>
-        <Select value={articulo} onValueChange={setArticulo} disabled={!marca}>
-          <SelectTrigger id="articulo">
-            <SelectValue placeholder="Seleccione un artículo" />
-          </SelectTrigger>
-          <SelectContent>
-            {articulosDisponibles.map((a) => (
-              <SelectItem key={a} value={a}>
-                {a}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="mesDestino">Mes Destino *</Label>
+        <Label htmlFor="mesDestino">Mes Destino (Mes-Año) *</Label>
         <Select value={mesDestino} onValueChange={setMesDestino}>
           <SelectTrigger id="mesDestino">
             <SelectValue placeholder="Seleccione el mes destino" />
           </SelectTrigger>
           <SelectContent>
-            {MESES.map((mes, idx) => (
-              <SelectItem key={idx + 1} value={String(idx + 1)}>
-                {mes}
+            {mesesDisponibles.map((mesAnio) => (
+              <SelectItem key={mesAnio} value={mesAnio}>
+                {mesAnio}
               </SelectItem>
             ))}
           </SelectContent>
@@ -151,23 +179,25 @@ export const BudgetForm = ({ onCalculate, mockData }: BudgetFormProps) => {
       </div>
 
       <div className="space-y-3">
-        <Label>Meses de Referencia *</Label>
-        <div className="grid grid-cols-2 gap-3 rounded-md border border-border bg-muted/30 p-4">
-          {MESES.map((mes, idx) => (
-            <div key={idx + 1} className="flex items-center space-x-2">
-              <Checkbox
-                id={`mes-${idx + 1}`}
-                checked={mesesReferencia.includes(idx + 1)}
-                onCheckedChange={() => handleMesToggle(idx + 1)}
-              />
-              <label
-                htmlFor={`mes-${idx + 1}`}
-                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-              >
-                {mes}
-              </label>
-            </div>
-          ))}
+        <Label>Meses de Referencia (Mes-Año) *</Label>
+        <div className="max-h-64 overflow-y-auto rounded-md border border-border bg-muted/30 p-4">
+          <div className="grid grid-cols-2 gap-3">
+            {mesesDisponibles.map((mesAnio) => (
+              <div key={mesAnio} className="flex items-center space-x-2">
+                <Checkbox
+                  id={`mes-${mesAnio}`}
+                  checked={mesesReferencia.includes(mesAnio)}
+                  onCheckedChange={() => handleMesToggle(mesAnio)}
+                />
+                <label
+                  htmlFor={`mes-${mesAnio}`}
+                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                >
+                  {mesAnio}
+                </label>
+              </div>
+            ))}
+          </div>
         </div>
         <p className="text-xs text-muted-foreground">
           Seleccionados: {mesesReferencia.length} mes(es)

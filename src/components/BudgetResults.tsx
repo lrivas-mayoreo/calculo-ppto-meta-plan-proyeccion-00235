@@ -12,42 +12,32 @@ import type { CalculationResult } from "@/pages/Index";
 
 interface BudgetResultsProps {
   result: CalculationResult;
-  marca: string;
-  articulo: string;
 }
 
-const MESES_NOMBRES = [
-  "Enero",
-  "Febrero",
-  "Marzo",
-  "Abril",
-  "Mayo",
-  "Junio",
-  "Julio",
-  "Agosto",
-  "Septiembre",
-  "Octubre",
-  "Noviembre",
-  "Diciembre",
-];
+export const BudgetResults = ({ result }: BudgetResultsProps) => {
+  const totalDistribuido = result.distribucionClientes.reduce(
+    (sum, dist) => sum + dist.totalCliente,
+    0
+  );
 
-export const BudgetResults = ({ result, marca, articulo }: BudgetResultsProps) => {
   return (
     <Card className="p-6 shadow-md">
       <div className="mb-6 space-y-2">
         <div className="flex items-center justify-between">
-          <h2 className="text-xl font-bold text-foreground">Resultados del Análisis</h2>
+          <h2 className="text-xl font-bold text-foreground">Distribución por Cliente</h2>
           <Badge variant="secondary" className="text-sm">
-            {marca} - {articulo}
+            {result.marca}
           </Badge>
         </div>
         <p className="text-sm text-muted-foreground">
-          Mes destino: {MESES_NOMBRES[result.mesDestino - 1]} | Venta real:{" "}
-          $
-          {result.ventaRealDestino.toLocaleString("es-ES", {
+          Mes destino: {result.mesDestino} | Venta total marca: $
+          {result.ventaTotalMarcaMesDestino.toLocaleString("es-ES", {
             minimumFractionDigits: 2,
             maximumFractionDigits: 2,
           })}
+        </p>
+        <p className="text-sm font-medium text-primary">
+          Factor aplicado: {result.factor.toFixed(6)} ({((result.factor - 1) * 100).toFixed(2)}%)
         </p>
       </div>
 
@@ -55,56 +45,61 @@ export const BudgetResults = ({ result, marca, articulo }: BudgetResultsProps) =
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Mes</TableHead>
+              <TableHead>Cliente</TableHead>
+              <TableHead>Artículo</TableHead>
               <TableHead className="text-right">Venta Real</TableHead>
               <TableHead className="text-right">Venta Ajustada</TableHead>
-              <TableHead className="text-right">Contribución</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {result.mesesSeleccionados.map((mes, idx) => (
-              <TableRow key={idx}>
-                <TableCell className="font-medium">{MESES_NOMBRES[mes.mes - 1]}</TableCell>
-                <TableCell className="text-right">
-                  $
-                  {mes.ventaReal.toLocaleString("es-ES", {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
-                  })}
-                </TableCell>
-                <TableCell className="text-right font-medium text-primary">
-                  $
-                  {mes.ventaAjustada.toLocaleString("es-ES", {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
-                  })}
-                </TableCell>
-                <TableCell className="text-right">
-                  $
-                  {(mes.ventaAjustada / result.mesesSeleccionados.length).toLocaleString(
-                    "es-ES",
-                    {
+            {result.distribucionClientes.map((dist, idx) => (
+              <>
+                {dist.articulos.map((art, artIdx) => (
+                  <TableRow key={`${idx}-${artIdx}`}>
+                    {artIdx === 0 && (
+                      <TableCell
+                        rowSpan={dist.articulos.length}
+                        className="font-semibold align-top"
+                      >
+                        {dist.cliente}
+                      </TableCell>
+                    )}
+                    <TableCell>{art.articulo}</TableCell>
+                    <TableCell className="text-right">
+                      $
+                      {art.ventaReal.toLocaleString("es-ES", {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}
+                    </TableCell>
+                    <TableCell className="text-right font-medium text-primary">
+                      $
+                      {art.ventaAjustada.toLocaleString("es-ES", {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}
+                    </TableCell>
+                  </TableRow>
+                ))}
+                <TableRow className="bg-muted/30">
+                  <TableCell colSpan={2} className="font-semibold">
+                    Subtotal {dist.cliente}
+                  </TableCell>
+                  <TableCell colSpan={2} className="text-right font-semibold">
+                    $
+                    {dist.totalCliente.toLocaleString("es-ES", {
                       minimumFractionDigits: 2,
                       maximumFractionDigits: 2,
-                    }
-                  )}
-                </TableCell>
-              </TableRow>
+                    })}
+                  </TableCell>
+                </TableRow>
+              </>
             ))}
-            <TableRow className="border-t-2 bg-muted/50 font-semibold">
-              <TableCell colSpan={2}>Total / Promedio</TableCell>
-              <TableCell className="text-right">
-                $
-                {result.mesesSeleccionados
-                  .reduce((sum, m) => sum + m.ventaAjustada, 0)
-                  .toLocaleString("es-ES", {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
-                  })}
-              </TableCell>
+            <TableRow className="border-t-2 bg-muted/50 font-bold">
+              <TableCell colSpan={3}>Total Distribuido</TableCell>
               <TableCell className="text-right text-accent">
                 $
-                {result.promedioPonderado.toLocaleString("es-ES", {
+                {totalDistribuido.toLocaleString("es-ES", {
                   minimumFractionDigits: 2,
                   maximumFractionDigits: 2,
                 })}
@@ -117,12 +112,19 @@ export const BudgetResults = ({ result, marca, articulo }: BudgetResultsProps) =
       <div className="mt-6 rounded-md border border-border bg-muted/30 p-4">
         <div className="space-y-1 text-sm">
           <p className="text-muted-foreground">
-            <span className="font-semibold text-foreground">Fórmula aplicada:</span> Promedio
-            ponderado = Σ(Venta real × Factor) / N° meses con data
+            <span className="font-semibold text-foreground">Fórmula aplicada:</span> Venta
+            ajustada = Venta real × Factor de marca
           </p>
           <p className="text-muted-foreground">
-            <span className="font-semibold text-foreground">Meses analizados:</span>{" "}
-            {result.mesesSeleccionados.length} de los seleccionados
+            <span className="font-semibold text-foreground">Meses de referencia:</span>{" "}
+            {result.mesesReferencia.join(", ")}
+          </p>
+          <p className="text-muted-foreground">
+            <span className="font-semibold text-foreground">Promedio ventas referencia:</span> $
+            {result.promedioVentaMesesReferencia.toLocaleString("es-ES", {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2,
+            })}
           </p>
         </div>
       </div>
