@@ -10,10 +10,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Calculator, Upload, X } from "lucide-react";
+import { Calculator, Upload, X, Download, Eye } from "lucide-react";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
 import type { MarcaPresupuesto } from "@/pages/Index";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
 interface BudgetFormProps {
   onCalculate: (
@@ -34,6 +36,7 @@ export const BudgetForm = ({ onCalculate, mockData, mesesDisponibles, onMarcasPr
   const [mesesReferencia, setMesesReferencia] = useState<string[]>([]);
   const [marcasPresupuesto, setMarcasPresupuesto] = useState<MarcaPresupuesto[]>([]);
   const [excelFileName, setExcelFileName] = useState("");
+  const [showMarcasCargadas, setShowMarcasCargadas] = useState(false);
 
   const handleMesToggle = (mesAnio: string) => {
     setMesesReferencia((prev) =>
@@ -137,7 +140,25 @@ export const BudgetForm = ({ onCalculate, mockData, mesesDisponibles, onMarcasPr
     onMarcasPresupuestoLoad([]);
     const fileInput = document.getElementById("excel-upload") as HTMLInputElement;
     if (fileInput) fileInput.value = "";
+    setShowMarcasCargadas(false);
     toast.info("Archivo Excel removido");
+  };
+
+  const handleDownloadTemplate = () => {
+    // Crear array con las marcas disponibles y columna de presupuesto vacía
+    const templateData = mockData.marcas.map((marca) => ({
+      Marca: marca,
+      Presupuesto: "",
+    }));
+
+    // Crear libro de Excel
+    const worksheet = XLSX.utils.json_to_sheet(templateData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Marcas");
+
+    // Descargar archivo
+    XLSX.writeFile(workbook, "Template_Marcas_Presupuesto.xlsx");
+    toast.success("Template Excel descargado correctamente");
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -175,24 +196,73 @@ export const BudgetForm = ({ onCalculate, mockData, mesesDisponibles, onMarcasPr
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="excel-upload">Cargar Excel con Marcas y Presupuestos *</Label>
+        <div className="flex items-center justify-between">
+          <Label htmlFor="excel-upload">Cargar Excel con Marcas y Presupuestos *</Label>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={handleDownloadTemplate}
+          >
+            <Download className="mr-2 h-4 w-4" />
+            Descargar Template
+          </Button>
+        </div>
         {excelFileName ? (
-          <div className="flex items-center gap-2 rounded-md border border-border bg-muted/50 p-3">
-            <div className="flex-1 truncate text-sm">
-              <span className="font-medium">{excelFileName}</span>
-              <span className="ml-2 text-muted-foreground">
-                ({marcasPresupuesto.length} marca{marcasPresupuesto.length !== 1 ? "s" : ""})
-              </span>
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 rounded-md border border-border bg-muted/50 p-3">
+              <div className="flex-1 truncate text-sm">
+                <span className="font-medium">{excelFileName}</span>
+                <span className="ml-2 text-muted-foreground">
+                  ({marcasPresupuesto.length} marca{marcasPresupuesto.length !== 1 ? "s" : ""})
+                </span>
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                onClick={() => setShowMarcasCargadas(!showMarcasCargadas)}
+                className="h-8 w-8"
+              >
+                <Eye className="h-4 w-4" />
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                onClick={handleRemoveExcel}
+                className="h-8 w-8"
+              >
+                <X className="h-4 w-4" />
+              </Button>
             </div>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              onClick={handleRemoveExcel}
-              className="h-8 w-8"
-            >
-              <X className="h-4 w-4" />
-            </Button>
+            <Collapsible open={showMarcasCargadas} onOpenChange={setShowMarcasCargadas}>
+              <CollapsibleContent>
+                <div className="rounded-md border border-border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Marca</TableHead>
+                        <TableHead className="text-right">Presupuesto</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {marcasPresupuesto.map((item, index) => (
+                        <TableRow key={index}>
+                          <TableCell className="font-medium">{item.marca}</TableCell>
+                          <TableCell className="text-right">
+                            ${item.presupuesto.toLocaleString("es-ES", {
+                              minimumFractionDigits: 2,
+                              maximumFractionDigits: 2,
+                            })}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
           </div>
         ) : (
           <div className="flex gap-2">
