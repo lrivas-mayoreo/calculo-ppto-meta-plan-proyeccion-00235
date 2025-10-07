@@ -10,15 +10,15 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Calculator, Upload } from "lucide-react";
+import { Calculator, Upload, X } from "lucide-react";
 import { toast } from "sonner";
+import * as XLSX from "xlsx";
 import type { MarcaPresupuesto } from "@/pages/Index";
 
 interface BudgetFormProps {
   onCalculate: (
-    marca: string,
     mesDestino: string,
-    presupuesto: number,
+    marcasPresupuesto: MarcaPresupuesto[],
     mesesReferencia: string[]
   ) => void;
   mockData: {
@@ -30,10 +30,10 @@ interface BudgetFormProps {
 }
 
 export const BudgetForm = ({ onCalculate, mockData, mesesDisponibles, onMarcasPresupuestoLoad }: BudgetFormProps) => {
-  const [marca, setMarca] = useState("");
   const [mesDestino, setMesDestino] = useState("");
-  const [presupuesto, setPresupuesto] = useState("");
   const [mesesReferencia, setMesesReferencia] = useState<string[]>([]);
+  const [marcasPresupuesto, setMarcasPresupuesto] = useState<MarcaPresupuesto[]>([]);
+  const [excelFileName, setExcelFileName] = useState("");
 
   const handleMesToggle = (mesAnio: string) => {
     setMesesReferencia((prev) =>
@@ -45,27 +45,106 @@ export const BudgetForm = ({ onCalculate, mockData, mesesDisponibles, onMarcasPr
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Simulación de carga de Excel
-    // En producción, usarías una librería como xlsx para parsear el archivo
+    setExcelFileName(file.name);
     toast.info("Procesando archivo Excel...");
-    
-    setTimeout(() => {
-      // Datos simulados del Excel
-      const marcasFromExcel: MarcaPresupuesto[] = [
-        { marca: "Nike", presupuesto: 50000 },
-        { marca: "Adidas", presupuesto: 45000 },
-      ];
 
-      onMarcasPresupuestoLoad(marcasFromExcel);
-      toast.success("Archivo Excel cargado correctamente");
-    }, 1000);
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const data = event.target?.result;
+        const workbook = XLSX.read(data, { type: "binary" });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const jsonData = XLSX.utils.sheet_to_json(worksheet) as any[];
+
+        // Validar estructura del Excel
+        if (jsonData.length === 0) {
+          toast.error("El archivo Excel está vacío");
+          setExcelFileName("");
+          e.target.value = "";
+          return;
+        }
+
+        // Validar que tenga las columnas necesarias (Marca y Presupuesto)
+        const firstRow = jsonData[0];
+        if (!firstRow.Marca && !firstRow.marca) {
+          toast.error("El archivo Excel debe tener una columna 'Marca'");
+          setExcelFileName("");
+          e.target.value = "";
+          return;
+        }
+        if (!firstRow.Presupuesto && !firstRow.presupuesto) {
+          toast.error("El archivo Excel debe tener una columna 'Presupuesto'");
+          setExcelFileName("");
+          e.target.value = "";
+          return;
+        }
+
+        // Parsear datos
+        const marcasFromExcel: MarcaPresupuesto[] = jsonData.map((row) => ({
+          marca: row.Marca || row.marca,
+          presupuesto: parseFloat(row.Presupuesto || row.presupuesto),
+        })).filter(item => item.marca && !isNaN(item.presupuesto));
+
+        if (marcasFromExcel.length === 0) {
+          toast.error("No se encontraron datos válidos en el archivo");
+          setExcelFileName("");
+          e.target.value = "";
+          return;
+        }
+
+        // Validar que las marcas existan en el maestro
+        const marcasInvalidas = marcasFromExcel.filter(
+          (item) => !mockData.marcas.includes(item.marca)
+        );
+
+        if (marcasInvalidas.length > 0) {
+          toast.error(
+            `Error 1: Las siguientes marcas no existen en el maestro: ${marcasInvalidas
+              .map((m) => m.marca)
+              .join(", ")}`
+          );
+          setExcelFileName("");
+          e.target.value = "";
+          return;
+        }
+
+        setMarcasPresupuesto(marcasFromExcel);
+        onMarcasPresupuestoLoad(marcasFromExcel);
+        toast.success(
+          `Archivo cargado correctamente: ${marcasFromExcel.length} marca(s) con presupuesto`
+        );
+      } catch (error) {
+        toast.error("Error al procesar el archivo Excel");
+        setExcelFileName("");
+        e.target.value = "";
+        console.error(error);
+      }
+    };
+
+    reader.onerror = () => {
+      toast.error("Error al leer el archivo");
+      setExcelFileName("");
+      e.target.value = "";
+    };
+
+    reader.readAsBinaryString(file);
+  };
+
+  const handleRemoveExcel = () => {
+    setMarcasPresupuesto([]);
+    setExcelFileName("");
+    onMarcasPresupuestoLoad([]);
+    const fileInput = document.getElementById("excel-upload") as HTMLInputElement;
+    if (fileInput) fileInput.value = "";
+    toast.info("Archivo Excel removido");
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!marca || !mesDestino || !presupuesto) {
-      toast.error("Por favor complete todos los campos obligatorios");
+    if (!mesDestino) {
+      toast.error("Por favor seleccione el mes destino");
       return;
     }
 
@@ -74,34 +153,15 @@ export const BudgetForm = ({ onCalculate, mockData, mesesDisponibles, onMarcasPr
       return;
     }
 
-    const presupuestoNum = parseFloat(presupuesto);
-    if (isNaN(presupuestoNum) || presupuestoNum <= 0) {
-      toast.error("Ingrese un presupuesto válido");
+    if (marcasPresupuesto.length === 0) {
+      toast.error("Por favor cargue un archivo Excel con marcas y presupuestos");
       return;
     }
 
     try {
-      onCalculate(marca, mesDestino, presupuestoNum, mesesReferencia);
-      
-      // Calcular y mostrar promedio de ventas de meses seleccionados
-      const ventasPorMes = mesesReferencia.map(mesAnio => {
-        let totalMes = 0;
-        mockData.marcas.forEach(m => {
-          if (m === marca) {
-            // Simular suma de ventas (en producción vendría de los datos reales)
-            totalMes += Math.floor(Math.random() * 50000) + 30000;
-          }
-        });
-        return totalMes;
-      });
-      
-      const promedioVentas = ventasPorMes.reduce((a, b) => a + b, 0) / ventasPorMes.length;
-      
+      onCalculate(mesDestino, marcasPresupuesto, mesesReferencia);
       toast.success(
-        `Cálculo realizado exitosamente. Promedio de ventas de ${mesesReferencia.length} meses: $${promedioVentas.toLocaleString("es-ES", {
-          minimumFractionDigits: 2,
-          maximumFractionDigits: 2,
-        })}`
+        `Cálculo realizado exitosamente para ${marcasPresupuesto.length} marca(s)`
       );
     } catch (error) {
       toast.error((error as Error).message);
@@ -115,38 +175,42 @@ export const BudgetForm = ({ onCalculate, mockData, mesesDisponibles, onMarcasPr
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="excel-upload">Cargar Excel (Opcional)</Label>
-        <div className="flex gap-2">
-          <Input
-            id="excel-upload"
-            type="file"
-            accept=".xlsx,.xls"
-            onChange={handleExcelUpload}
-            className="cursor-pointer"
-          />
-          <Button type="button" variant="outline" size="icon">
-            <Upload className="h-4 w-4" />
-          </Button>
-        </div>
+        <Label htmlFor="excel-upload">Cargar Excel con Marcas y Presupuestos *</Label>
+        {excelFileName ? (
+          <div className="flex items-center gap-2 rounded-md border border-border bg-muted/50 p-3">
+            <div className="flex-1 truncate text-sm">
+              <span className="font-medium">{excelFileName}</span>
+              <span className="ml-2 text-muted-foreground">
+                ({marcasPresupuesto.length} marca{marcasPresupuesto.length !== 1 ? "s" : ""})
+              </span>
+            </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              onClick={handleRemoveExcel}
+              className="h-8 w-8"
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+        ) : (
+          <div className="flex gap-2">
+            <Input
+              id="excel-upload"
+              type="file"
+              accept=".xlsx,.xls"
+              onChange={handleExcelUpload}
+              className="cursor-pointer"
+            />
+            <Button type="button" variant="outline" size="icon">
+              <Upload className="h-4 w-4" />
+            </Button>
+          </div>
+        )}
         <p className="text-xs text-muted-foreground">
           Formato: Columnas "Marca" y "Presupuesto"
         </p>
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="marca">Marca *</Label>
-        <Select value={marca} onValueChange={setMarca}>
-          <SelectTrigger id="marca">
-            <SelectValue placeholder="Seleccione una marca" />
-          </SelectTrigger>
-          <SelectContent>
-            {mockData.marcas.map((m) => (
-              <SelectItem key={m} value={m}>
-                {m}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
       </div>
 
       <div className="space-y-2">
@@ -165,18 +229,6 @@ export const BudgetForm = ({ onCalculate, mockData, mesesDisponibles, onMarcasPr
         </Select>
       </div>
 
-      <div className="space-y-2">
-        <Label htmlFor="presupuesto">Presupuesto a Distribuir *</Label>
-        <Input
-          id="presupuesto"
-          type="number"
-          placeholder="20000"
-          value={presupuesto}
-          onChange={(e) => setPresupuesto(e.target.value)}
-          min="0"
-          step="0.01"
-        />
-      </div>
 
       <div className="space-y-3">
         <Label>Meses de Referencia (Mes-Año) *</Label>
