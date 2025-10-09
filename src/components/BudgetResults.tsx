@@ -19,11 +19,11 @@ interface BudgetResultsProps {
 }
 
 export const BudgetResults = ({ result }: BudgetResultsProps) => {
-  const [filtroVendedor, setFiltroVendedor] = useState("");
-  const [filtroCliente, setFiltroCliente] = useState("");
-  const [filtroMarca, setFiltroMarca] = useState("");
-  const [filtroArticulo, setFiltroArticulo] = useState("");
-  const [filtroMes, setFiltroMes] = useState("");
+  const [filtroVendedor, setFiltroVendedor] = useState("all");
+  const [filtroCliente, setFiltroCliente] = useState("all");
+  const [filtroMarca, setFiltroMarca] = useState("all");
+  const [filtroArticulo, setFiltroArticulo] = useState("all");
+  const [filtroMes, setFiltroMes] = useState("all");
 
   // Obtener valores únicos para los filtros
   const vendedoresUnicos = Array.from(
@@ -62,17 +62,17 @@ export const BudgetResults = ({ result }: BudgetResultsProps) => {
 
   // Aplicar filtros
   const resultadosFiltrados = result.resultadosMarcas
-    .filter((marca) => !filtroMarca || marca.marca === filtroMarca)
-    .filter((marca) => !filtroMes || marca.mesDestino === filtroMes)
+    .filter((marca) => filtroMarca === "all" || marca.marca === filtroMarca)
+    .filter((marca) => filtroMes === "all" || marca.mesDestino === filtroMes)
     .map((marca) => ({
       ...marca,
       distribucionClientes: marca.distribucionClientes
-        .filter((cliente) => !filtroVendedor || cliente.vendedor === filtroVendedor)
-        .filter((cliente) => !filtroCliente || cliente.cliente === filtroCliente)
+        .filter((cliente) => filtroVendedor === "all" || cliente.vendedor === filtroVendedor)
+        .filter((cliente) => filtroCliente === "all" || cliente.cliente === filtroCliente)
         .map((cliente) => ({
           ...cliente,
           articulos: cliente.articulos.filter(
-            (articulo) => !filtroArticulo || articulo.articulo === filtroArticulo
+            (articulo) => filtroArticulo === "all" || articulo.articulo === filtroArticulo
           ),
         }))
         .filter((cliente) => cliente.articulos.length > 0),
@@ -93,7 +93,7 @@ export const BudgetResults = ({ result }: BudgetResultsProps) => {
                 <SelectValue placeholder="Todos" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">Todos</SelectItem>
+                <SelectItem value="all">Todos</SelectItem>
                 {vendedoresUnicos.map((vendedor) => (
                   <SelectItem key={vendedor} value={vendedor}>
                     {vendedor}
@@ -110,7 +110,7 @@ export const BudgetResults = ({ result }: BudgetResultsProps) => {
                 <SelectValue placeholder="Todos" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">Todos</SelectItem>
+                <SelectItem value="all">Todos</SelectItem>
                 {clientesUnicos.map((cliente) => (
                   <SelectItem key={cliente} value={cliente}>
                     {cliente}
@@ -127,7 +127,7 @@ export const BudgetResults = ({ result }: BudgetResultsProps) => {
                 <SelectValue placeholder="Todas" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">Todas</SelectItem>
+                <SelectItem value="all">Todas</SelectItem>
                 {marcasUnicas.map((marca) => (
                   <SelectItem key={marca} value={marca}>
                     {marca}
@@ -144,7 +144,7 @@ export const BudgetResults = ({ result }: BudgetResultsProps) => {
                 <SelectValue placeholder="Todos" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">Todos</SelectItem>
+                <SelectItem value="all">Todos</SelectItem>
                 {articulosUnicos.map((articulo) => (
                   <SelectItem key={articulo} value={articulo}>
                     {articulo}
@@ -161,7 +161,7 @@ export const BudgetResults = ({ result }: BudgetResultsProps) => {
                 <SelectValue placeholder="Todos" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">Todos</SelectItem>
+                <SelectItem value="all">Todos</SelectItem>
                 {mesesUnicos.map((mes) => (
                   <SelectItem key={mes} value={mes}>
                     {mes}
