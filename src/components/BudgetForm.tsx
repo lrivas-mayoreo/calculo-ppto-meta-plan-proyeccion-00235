@@ -19,7 +19,6 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 
 interface BudgetFormProps {
   onCalculate: (
-    mesDestino: string,
     marcasPresupuesto: MarcaPresupuesto[],
     mesesReferencia: string[]
   ) => void;
@@ -32,7 +31,6 @@ interface BudgetFormProps {
 }
 
 export const BudgetForm = ({ onCalculate, mockData, mesesDisponibles, onMarcasPresupuestoLoad }: BudgetFormProps) => {
-  const [mesDestino, setMesDestino] = useState("");
   const [mesesReferencia, setMesesReferencia] = useState<string[]>([]);
   const [marcasPresupuesto, setMarcasPresupuesto] = useState<MarcaPresupuesto[]>([]);
   const [excelFileName, setExcelFileName] = useState("");
@@ -68,10 +66,16 @@ export const BudgetForm = ({ onCalculate, mockData, mesesDisponibles, onMarcasPr
           return;
         }
 
-        // Validar que tenga las columnas necesarias (Marca y Presupuesto)
+        // Validar que tenga las columnas necesarias (Marca, Mes y Presupuesto)
         const firstRow = jsonData[0];
         if (!firstRow.Marca && !firstRow.marca) {
           toast.error("El archivo Excel debe tener una columna 'Marca'");
+          setExcelFileName("");
+          e.target.value = "";
+          return;
+        }
+        if (!firstRow.Mes && !firstRow.mes) {
+          toast.error("El archivo Excel debe tener una columna 'Mes'");
           setExcelFileName("");
           e.target.value = "";
           return;
@@ -86,8 +90,9 @@ export const BudgetForm = ({ onCalculate, mockData, mesesDisponibles, onMarcasPr
         // Parsear datos
         const marcasFromExcel: MarcaPresupuesto[] = jsonData.map((row) => ({
           marca: row.Marca || row.marca,
+          mesDestino: row.Mes || row.mes,
           presupuesto: parseFloat(row.Presupuesto || row.presupuesto),
-        })).filter(item => item.marca && !isNaN(item.presupuesto));
+        })).filter(item => item.marca && item.mesDestino && !isNaN(item.presupuesto));
 
         if (marcasFromExcel.length === 0) {
           toast.error("No se encontraron datos válidos en el archivo");
@@ -145,9 +150,10 @@ export const BudgetForm = ({ onCalculate, mockData, mesesDisponibles, onMarcasPr
   };
 
   const handleDownloadTemplate = () => {
-    // Crear array con las marcas disponibles y columna de presupuesto vacía
+    // Crear array con las marcas disponibles y columnas de Mes y Presupuesto vacías
     const templateData = mockData.marcas.map((marca) => ({
       Marca: marca,
+      Mes: "",
       Presupuesto: "",
     }));
 
@@ -164,23 +170,18 @@ export const BudgetForm = ({ onCalculate, mockData, mesesDisponibles, onMarcasPr
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!mesDestino) {
-      toast.error("Por favor seleccione el mes destino");
-      return;
-    }
-
     if (mesesReferencia.length === 0) {
       toast.error("Seleccione al menos un mes de referencia");
       return;
     }
 
     if (marcasPresupuesto.length === 0) {
-      toast.error("Por favor cargue un archivo Excel con marcas y presupuestos");
+      toast.error("Por favor cargue un archivo Excel con marcas, meses y presupuestos");
       return;
     }
 
     try {
-      onCalculate(mesDestino, marcasPresupuesto, mesesReferencia);
+      onCalculate(marcasPresupuesto, mesesReferencia);
       toast.success(
         `Cálculo realizado exitosamente para ${marcasPresupuesto.length} marca(s)`
       );
@@ -243,6 +244,7 @@ export const BudgetForm = ({ onCalculate, mockData, mesesDisponibles, onMarcasPr
                     <TableHeader>
                       <TableRow>
                         <TableHead>Marca</TableHead>
+                        <TableHead>Mes</TableHead>
                         <TableHead className="text-right">Presupuesto</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -250,6 +252,7 @@ export const BudgetForm = ({ onCalculate, mockData, mesesDisponibles, onMarcasPr
                       {marcasPresupuesto.map((item, index) => (
                         <TableRow key={index}>
                           <TableCell className="font-medium">{item.marca}</TableCell>
+                          <TableCell>{item.mesDestino}</TableCell>
                           <TableCell className="text-right">
                             ${item.presupuesto.toLocaleString("es-ES", {
                               minimumFractionDigits: 2,
@@ -279,26 +282,9 @@ export const BudgetForm = ({ onCalculate, mockData, mesesDisponibles, onMarcasPr
           </div>
         )}
         <p className="text-xs text-muted-foreground">
-          Formato: Columnas "Marca" y "Presupuesto"
+          Formato: Columnas "Marca", "Mes" y "Presupuesto"
         </p>
       </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="mesDestino">Mes Destino (Mes-Año) *</Label>
-        <Select value={mesDestino} onValueChange={setMesDestino}>
-          <SelectTrigger id="mesDestino">
-            <SelectValue placeholder="Seleccione el mes destino" />
-          </SelectTrigger>
-          <SelectContent>
-            {mesesDisponibles.map((mesAnio) => (
-              <SelectItem key={mesAnio} value={mesAnio}>
-                {mesAnio}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
 
       <div className="space-y-3">
         <Label>Meses de Referencia (Mes-Año) *</Label>

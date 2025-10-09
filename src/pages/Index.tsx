@@ -4,28 +4,36 @@ import { BudgetForm } from "@/components/BudgetForm";
 import { BudgetResults } from "@/components/BudgetResults";
 import { MetricsCard } from "@/components/MetricsCard";
 import { Calculator, TrendingUp, Calendar, Users } from "lucide-react";
+import { toast } from "sonner";
 
-// Datos de ejemplo simulados - Ventas por marca, cliente, artículo y mes-año
+// Datos de ejemplo simulados - Ventas por marca, cliente, artículo, vendedor y mes-año
 const MOCK_DATA = {
-  marcas: ["Nike", "Adidas", "Puma", "Reebok"],
-  clientes: ["Cliente A", "Cliente B", "Cliente C", "Cliente D", "Cliente E"],
+  marcas: ["Nike", "Adidas", "Puma", "Reebok", "New Balance"],
+  clientes: ["Cliente A", "Cliente B", "Cliente C", "Cliente D"],
+  vendedores: ["Vendedor 1", "Vendedor 2", "Vendedor 3"],
   articulos: {
-    Nike: ["Air Max", "React", "Zoom", "Free"],
-    Adidas: ["Ultraboost", "NMD", "Superstar", "Stan Smith"],
-    Puma: ["Suede", "RS-X", "Thunder", "Cali"],
-    Reebok: ["Classic", "Nano", "Club C", "Zig Kinetica"],
-  },
-  // Ventas por marca -> cliente -> artículo -> mes-año
-  ventas: {} as Record<string, Record<string, Record<string, Record<string, number>>>>,
+    Nike: ["Nike Air Max", "Nike React", "Nike Zoom"],
+    Adidas: ["Adidas Ultraboost", "Adidas NMD", "Adidas Superstar"],
+    Puma: ["Puma Suede", "Puma RS-X", "Puma Clyde"],
+    Reebok: ["Reebok Classic", "Reebok Nano", "Reebok Zig"],
+    "New Balance": ["New Balance 574", "New Balance 990", "New Balance 327"],
+  } as Record<string, string[]>,
+  ventas: [] as Array<{
+    mesAnio: string;
+    marca: string;
+    cliente: string;
+    articulo: string;
+    vendedor: string;
+    venta: number;
+  }>,
 };
 
-// Generar ventas simuladas con meses-año (últimos 24 meses)
 const generarMesesAnio = () => {
   const meses = [];
-  const ahora = new Date();
-  for (let i = 23; i >= 0; i--) {
-    const fecha = new Date(ahora.getFullYear(), ahora.getMonth() - i, 1);
-    const mes = (fecha.getMonth() + 1).toString().padStart(2, '0');
+  const hoy = new Date();
+  for (let i = 0; i < 24; i++) {
+    const fecha = new Date(hoy.getFullYear(), hoy.getMonth() - i, 1);
+    const mes = fecha.toLocaleString("es-ES", { month: "long" });
     const anio = fecha.getFullYear();
     meses.push(`${mes}-${anio}`);
   }
@@ -34,15 +42,23 @@ const generarMesesAnio = () => {
 
 const mesesDisponibles = generarMesesAnio();
 
-Object.keys(MOCK_DATA.articulos).forEach((marca) => {
-  MOCK_DATA.ventas[marca] = {};
-  MOCK_DATA.clientes.forEach((cliente) => {
-    MOCK_DATA.ventas[marca][cliente] = {};
-    MOCK_DATA.articulos[marca as keyof typeof MOCK_DATA.articulos].forEach((articulo) => {
-      MOCK_DATA.ventas[marca][cliente][articulo] = {};
-      mesesDisponibles.forEach((mesAnio) => {
-        MOCK_DATA.ventas[marca][cliente][articulo][mesAnio] = 
-          Math.floor(Math.random() * 15000) + 5000;
+// Generar datos de ventas para los últimos 24 meses (excepto New Balance que no tiene ventas)
+mesesDisponibles.forEach((mesAnio) => {
+  MOCK_DATA.marcas.forEach((marca) => {
+    // New Balance no tiene ventas (para demostrar Error 3)
+    if (marca === "New Balance") return;
+    
+    MOCK_DATA.clientes.forEach((cliente) => {
+      MOCK_DATA.articulos[marca]?.forEach((articulo) => {
+        const vendedor = MOCK_DATA.vendedores[Math.floor(Math.random() * MOCK_DATA.vendedores.length)];
+        MOCK_DATA.ventas.push({
+          mesAnio,
+          marca,
+          cliente,
+          articulo,
+          vendedor,
+          venta: Math.random() * 10000 + 5000,
+        });
       });
     });
   });
@@ -50,29 +66,37 @@ Object.keys(MOCK_DATA.articulos).forEach((marca) => {
 
 export interface MarcaPresupuesto {
   marca: string;
+  mesDestino: string;
   presupuesto: number;
 }
 
 export interface CalculationResult {
-  mesDestino: string;
-  mesesReferencia: string[];
-  resultadosMarcas: {
+  totalPresupuesto: number;
+  promedioVentaReferencia: number;
+  resultadosMarcas: Array<{
     marca: string;
+    mesDestino: string;
     presupuesto: number;
-    ventaTotalMarcaMesDestino: number;
-    factor: number;
     promedioVentaMesesReferencia: number;
     porcentajeCambio: number;
-    distribucionClientes: {
+    distribucionClientes: Array<{
       cliente: string;
-      articulos: {
+      vendedor: string;
+      articulos: Array<{
         articulo: string;
         ventaReal: number;
         ventaAjustada: number;
-      }[];
-      totalCliente: number;
-    }[];
-  }[];
+        variacion: number;
+      }>;
+      subtotal: number;
+    }>;
+  }>;
+  errores: Array<{
+    tipo: number;
+    marca: string;
+    mesDestino: string;
+    mensaje: string;
+  }>;
 }
 
 const Index = () => {
@@ -80,97 +104,150 @@ const Index = () => {
   const [marcasPresupuesto, setMarcasPresupuesto] = useState<MarcaPresupuesto[]>([]);
 
   const handleCalculate = (
-    mesDestino: string,
     marcasPresupuesto: MarcaPresupuesto[],
     mesesReferencia: string[]
   ) => {
-    const resultadosMarcas = marcasPresupuesto.map((marcaPresupuesto) => {
-      const { marca, presupuesto } = marcaPresupuesto;
+    const resultadosMarcas: CalculationResult["resultadosMarcas"] = [];
+    const errores: CalculationResult["errores"] = [];
+    let totalPresupuestoGeneral = 0;
+    let totalPromedioReferenciaGeneral = 0;
 
-      // Validación Error 1: Marca no existe en maestro
+    marcasPresupuesto.forEach((marcaPresupuesto) => {
+      const { marca, mesDestino, presupuesto } = marcaPresupuesto;
+
+      // Validación Error 1: Marca no existe
       if (!MOCK_DATA.marcas.includes(marca)) {
-        throw new Error(`Error 1: La marca "${marca}" no existe en el maestro de marcas`);
-      }
-
-      // Calcular venta total de la marca en el mes destino
-      let ventaTotalMarcaMesDestino = 0;
-      MOCK_DATA.clientes.forEach((cliente) => {
-        MOCK_DATA.articulos[marca as keyof typeof MOCK_DATA.articulos]?.forEach((articulo) => {
-          const venta = MOCK_DATA.ventas[marca]?.[cliente]?.[articulo]?.[mesDestino] || 0;
-          ventaTotalMarcaMesDestino += venta;
+        errores.push({
+          tipo: 1,
+          marca,
+          mesDestino,
+          mensaje: `La marca "${marca}" no existe en el maestro de marcas`,
         });
-      });
-
-      // Validación Error 4: Marca sin ventas
-      if (ventaTotalMarcaMesDestino === 0) {
-        throw new Error(`Error 4: La marca "${marca}" no tiene ventas en el mes destino ${mesDestino}`);
+        return;
       }
 
-      // Calcular factor por marca
-      const factor = presupuesto / ventaTotalMarcaMesDestino;
+      // Obtener ventas de los meses de referencia para esta marca
+      const ventasMesesReferencia = MOCK_DATA.ventas.filter(
+        (v) => mesesReferencia.includes(v.mesAnio) && v.marca === marca
+      );
 
-      // Calcular promedio de ventas en meses de referencia
-      let totalVentasMesesReferencia = 0;
-      let contadorMeses = 0;
+      // Validación Error 4: Marca sin ventas en meses de referencia
+      if (ventasMesesReferencia.length === 0) {
+        errores.push({
+          tipo: 4,
+          marca,
+          mesDestino,
+          mensaje: `La marca "${marca}" no tiene ventas en los meses de referencia seleccionados`,
+        });
+        return;
+      }
 
-      mesesReferencia.forEach((mesAnio) => {
-        let ventaTotalMes = 0;
-        MOCK_DATA.clientes.forEach((cliente) => {
-          MOCK_DATA.articulos[marca as keyof typeof MOCK_DATA.articulos]?.forEach((articulo) => {
-            const venta = MOCK_DATA.ventas[marca]?.[cliente]?.[articulo]?.[mesAnio] || 0;
-            ventaTotalMes += venta;
+      // Calcular promedio de ventas para esta marca
+      const sumaVentas = ventasMesesReferencia.reduce((sum, v) => sum + v.venta, 0);
+      const promedioVentaMarca = sumaVentas / mesesReferencia.length;
+
+      // Validación Error 3: Marca sin ventas para distribuir
+      if (promedioVentaMarca === 0) {
+        errores.push({
+          tipo: 3,
+          marca,
+          mesDestino,
+          mensaje: `Falta de venta para distribución del presupuesto de la marca "${marca}"`,
+        });
+        return;
+      }
+
+      // Calcular factor de ajuste a nivel de marca
+      const factorMarca = presupuesto / promedioVentaMarca;
+      const porcentajeCambio = ((factorMarca - 1) * 100);
+
+      // Agrupar ventas por cliente para esta marca
+      const ventasPorCliente = new Map<string, { cliente: string; vendedor: string; ventas: typeof MOCK_DATA.ventas }>();
+
+      ventasMesesReferencia.forEach((venta) => {
+        if (!ventasPorCliente.has(venta.cliente)) {
+          ventasPorCliente.set(venta.cliente, {
+            cliente: venta.cliente,
+            vendedor: venta.vendedor,
+            ventas: [],
           });
-        });
-        if (ventaTotalMes > 0) {
-          totalVentasMesesReferencia += ventaTotalMes;
-          contadorMeses++;
         }
+        ventasPorCliente.get(venta.cliente)!.ventas.push(venta);
       });
 
-      const promedioVentaMesesReferencia = contadorMeses > 0 
-        ? totalVentasMesesReferencia / contadorMeses 
-        : 0;
+      // Calcular distribución por cliente
+      const distribucionClientes = Array.from(ventasPorCliente.values()).map((clienteData) => {
+        const articulosMap = new Map<string, number>();
 
-      // Calcular porcentaje de cambio
-      const porcentajeCambio = ((presupuesto - promedioVentaMesesReferencia) / promedioVentaMesesReferencia) * 100;
+        // Sumar ventas por artículo
+        clienteData.ventas.forEach((venta) => {
+          const ventaActual = articulosMap.get(venta.articulo) || 0;
+          articulosMap.set(venta.articulo, ventaActual + venta.venta);
+        });
 
-      // Distribución por cliente
-      const distribucionClientes = MOCK_DATA.clientes.map((cliente) => {
-        const articulos = MOCK_DATA.articulos[marca as keyof typeof MOCK_DATA.articulos]?.map((articulo) => {
-          const ventaReal = MOCK_DATA.ventas[marca]?.[cliente]?.[articulo]?.[mesDestino] || 0;
-          const ventaAjustada = ventaReal * factor;
+        // Calcular promedio por artículo y aplicar factor
+        const articulos = Array.from(articulosMap.entries()).map(([articulo, ventaTotal]) => {
+          const ventaPromedio = ventaTotal / mesesReferencia.length;
+          const ventaAjustada = ventaPromedio * factorMarca;
+          const variacion = ventaAjustada - ventaPromedio;
+
           return {
             articulo,
-            ventaReal,
+            ventaReal: ventaPromedio,
             ventaAjustada,
+            variacion,
           };
-        }) || [];
+        });
 
-        const totalCliente = articulos.reduce((sum, art) => sum + art.ventaAjustada, 0);
+        const subtotal = articulos.reduce((sum, art) => sum + art.ventaAjustada, 0);
 
         return {
-          cliente,
+          cliente: clienteData.cliente,
+          vendedor: clienteData.vendedor,
           articulos,
-          totalCliente,
+          subtotal,
         };
-      }).filter(dist => dist.totalCliente > 0);
+      });
 
-      return {
+      resultadosMarcas.push({
         marca,
+        mesDestino,
         presupuesto,
-        ventaTotalMarcaMesDestino,
-        factor,
-        promedioVentaMesesReferencia,
+        promedioVentaMesesReferencia: promedioVentaMarca,
         porcentajeCambio,
         distribucionClientes,
-      };
+      });
+
+      totalPresupuestoGeneral += presupuesto;
+      totalPromedioReferenciaGeneral += promedioVentaMarca;
     });
 
-    setResult({
-      mesDestino,
-      mesesReferencia,
+    const resultadoFinal: CalculationResult = {
+      totalPresupuesto: totalPresupuestoGeneral,
+      promedioVentaReferencia: totalPromedioReferenciaGeneral / Math.max(resultadosMarcas.length, 1),
       resultadosMarcas,
-    });
+      errores,
+    };
+
+    // Mostrar errores si existen
+    if (errores.length > 0) {
+      errores.forEach((error) => {
+        toast.error(`Error ${error.tipo}: ${error.mensaje}`);
+      });
+    }
+
+    // Mostrar promedio de ventas de referencia
+    const promedioTotal = resultadosMarcas.reduce((sum, r) => sum + r.promedioVentaMesesReferencia, 0);
+    const promedioMensaje = resultadosMarcas.length > 0 
+      ? `Promedio de venta en meses de referencia: $${(promedioTotal / resultadosMarcas.length).toLocaleString("es-ES", {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        })}`
+      : "No se calcularon marcas";
+    
+    toast.info(promedioMensaje);
+
+    setResult(resultadoFinal);
   };
 
   return (
@@ -197,12 +274,12 @@ const Index = () => {
         <div className="grid gap-6 lg:grid-cols-3">
           <div className="lg:col-span-1">
             <Card className="p-6 shadow-md">
-              <BudgetForm 
-                onCalculate={handleCalculate} 
-                mockData={MOCK_DATA} 
-                mesesDisponibles={mesesDisponibles}
-                onMarcasPresupuestoLoad={setMarcasPresupuesto}
-              />
+          <BudgetForm
+            onCalculate={handleCalculate}
+            mockData={MOCK_DATA}
+            mesesDisponibles={mesesDisponibles}
+            onMarcasPresupuestoLoad={setMarcasPresupuesto}
+          />
             </Card>
           </div>
 
@@ -212,9 +289,7 @@ const Index = () => {
                 <div className="grid gap-4 md:grid-cols-4">
                   <MetricsCard
                     title="Presupuesto Total"
-                    value={`$${result.resultadosMarcas
-                      .reduce((sum, m) => sum + m.presupuesto, 0)
-                      .toLocaleString("es-ES", {
+                    value={`$${result.totalPresupuesto.toLocaleString("es-ES", {
                         minimumFractionDigits: 2,
                         maximumFractionDigits: 2,
                       })}`}
@@ -230,27 +305,20 @@ const Index = () => {
                   />
                   <MetricsCard
                     title="Promedio General"
-                    value={`$${(
-                      result.resultadosMarcas.reduce(
-                        (sum, m) => sum + m.promedioVentaMesesReferencia,
-                        0
-                      ) / result.resultadosMarcas.length
-                    ).toLocaleString("es-ES", {
+                    value={`$${result.promedioVentaReferencia.toLocaleString("es-ES", {
                       minimumFractionDigits: 2,
                       maximumFractionDigits: 2,
                     })}`}
                     icon={Calendar}
                     trend="neutral"
-                    subtitle={`${result.mesesReferencia.length} meses ref.`}
+                    subtitle="Meses referencia"
                   />
                   <MetricsCard
-                    title="Total Clientes"
-                    value={result.resultadosMarcas
-                      .reduce((sum, m) => sum + m.distribucionClientes.length, 0)
-                      .toString()}
+                    title="Errores"
+                    value={result.errores.length.toString()}
                     icon={Users}
-                    trend="positive"
-                    subtitle="Con distribución"
+                    trend={result.errores.length > 0 ? "negative" : "positive"}
+                    subtitle="Marcas con error"
                   />
                 </div>
 

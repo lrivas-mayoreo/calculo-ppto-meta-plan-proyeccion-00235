@@ -7,169 +7,357 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { ArrowUp, ArrowDown } from "lucide-react";
 import type { CalculationResult } from "@/pages/Index";
+import { useState } from "react";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 interface BudgetResultsProps {
   result: CalculationResult;
 }
 
 export const BudgetResults = ({ result }: BudgetResultsProps) => {
-  const totalPresupuesto = result.resultadosMarcas.reduce(
-    (sum, marca) => sum + marca.presupuesto,
-    0
+  const [filtroVendedor, setFiltroVendedor] = useState("");
+  const [filtroCliente, setFiltroCliente] = useState("");
+  const [filtroMarca, setFiltroMarca] = useState("");
+  const [filtroArticulo, setFiltroArticulo] = useState("");
+  const [filtroMes, setFiltroMes] = useState("");
+
+  // Obtener valores únicos para los filtros
+  const vendedoresUnicos = Array.from(
+    new Set(
+      result.resultadosMarcas.flatMap((m) =>
+        m.distribucionClientes.map((c) => c.vendedor)
+      )
+    )
   );
 
+  const clientesUnicos = Array.from(
+    new Set(
+      result.resultadosMarcas.flatMap((m) =>
+        m.distribucionClientes.map((c) => c.cliente)
+      )
+    )
+  );
+
+  const marcasUnicas = Array.from(
+    new Set(result.resultadosMarcas.map((m) => m.marca))
+  );
+
+  const mesesUnicos = Array.from(
+    new Set(result.resultadosMarcas.map((m) => m.mesDestino))
+  );
+
+  const articulosUnicos = Array.from(
+    new Set(
+      result.resultadosMarcas.flatMap((m) =>
+        m.distribucionClientes.flatMap((c) =>
+          c.articulos.map((a) => a.articulo)
+        )
+      )
+    )
+  );
+
+  // Aplicar filtros
+  const resultadosFiltrados = result.resultadosMarcas
+    .filter((marca) => !filtroMarca || marca.marca === filtroMarca)
+    .filter((marca) => !filtroMes || marca.mesDestino === filtroMes)
+    .map((marca) => ({
+      ...marca,
+      distribucionClientes: marca.distribucionClientes
+        .filter((cliente) => !filtroVendedor || cliente.vendedor === filtroVendedor)
+        .filter((cliente) => !filtroCliente || cliente.cliente === filtroCliente)
+        .map((cliente) => ({
+          ...cliente,
+          articulos: cliente.articulos.filter(
+            (articulo) => !filtroArticulo || articulo.articulo === filtroArticulo
+          ),
+        }))
+        .filter((cliente) => cliente.articulos.length > 0),
+    }))
+    .filter((marca) => marca.distribucionClientes.length > 0);
+
+  const totalPresupuesto = result.totalPresupuesto;
+
   return (
-    <Card className="overflow-hidden shadow-md">
-      <div className="border-b border-border bg-muted/50 p-6">
-        <h2 className="text-xl font-semibold text-foreground">
+    <div className="space-y-6">
+      <Card className="p-6 shadow-md">
+        <h3 className="mb-4 text-lg font-semibold text-foreground">Filtros</h3>
+        <div className="grid gap-4 md:grid-cols-5">
+          <div className="space-y-2">
+            <Label htmlFor="filtro-vendedor">Vendedor</Label>
+            <Select value={filtroVendedor} onValueChange={setFiltroVendedor}>
+              <SelectTrigger id="filtro-vendedor">
+                <SelectValue placeholder="Todos" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">Todos</SelectItem>
+                {vendedoresUnicos.map((vendedor) => (
+                  <SelectItem key={vendedor} value={vendedor}>
+                    {vendedor}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="filtro-cliente">Cliente</Label>
+            <Select value={filtroCliente} onValueChange={setFiltroCliente}>
+              <SelectTrigger id="filtro-cliente">
+                <SelectValue placeholder="Todos" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">Todos</SelectItem>
+                {clientesUnicos.map((cliente) => (
+                  <SelectItem key={cliente} value={cliente}>
+                    {cliente}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="filtro-marca">Marca</Label>
+            <Select value={filtroMarca} onValueChange={setFiltroMarca}>
+              <SelectTrigger id="filtro-marca">
+                <SelectValue placeholder="Todas" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">Todas</SelectItem>
+                {marcasUnicas.map((marca) => (
+                  <SelectItem key={marca} value={marca}>
+                    {marca}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="filtro-articulo">Artículo</Label>
+            <Select value={filtroArticulo} onValueChange={setFiltroArticulo}>
+              <SelectTrigger id="filtro-articulo">
+                <SelectValue placeholder="Todos" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">Todos</SelectItem>
+                {articulosUnicos.map((articulo) => (
+                  <SelectItem key={articulo} value={articulo}>
+                    {articulo}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="filtro-mes">Mes</Label>
+            <Select value={filtroMes} onValueChange={setFiltroMes}>
+              <SelectTrigger id="filtro-mes">
+                <SelectValue placeholder="Todos" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">Todos</SelectItem>
+                {mesesUnicos.map((mes) => (
+                  <SelectItem key={mes} value={mes}>
+                    {mes}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      </Card>
+
+      <Card className="p-6 shadow-md">
+        <h2 className="mb-4 text-xl font-bold text-foreground">
           Distribución de Presupuesto por Marca
         </h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Mes Destino: <span className="font-medium text-foreground">{result.mesDestino}</span> |
-          Meses Referencia: <span className="font-medium text-foreground">{result.mesesReferencia.join(", ")}</span>
-        </p>
-        <p className="mt-1 text-sm text-muted-foreground">
+        <p className="mb-6 text-sm text-muted-foreground">
           Total Presupuesto:{" "}
-          <span className="font-medium text-foreground">
-            ${totalPresupuesto.toLocaleString("es-ES", {
+          <span className="font-semibold text-foreground">
+            $
+            {totalPresupuesto.toLocaleString("es-ES", {
               minimumFractionDigits: 2,
               maximumFractionDigits: 2,
             })}
           </span>
         </p>
-      </div>
 
-      <div className="overflow-x-auto">
-        {result.resultadosMarcas.map((marcaResult, marcaIdx) => (
-          <div key={marcaIdx}>
-            <div className="bg-primary/10 p-4">
-              <div className="flex items-center justify-between">
-                <h3 className="text-lg font-bold text-foreground">{marcaResult.marca}</h3>
-                <div className="flex gap-4 text-sm">
+        <div className="space-y-8">
+          {resultadosFiltrados.map((marcaResultado, index) => (
+            <div key={index}>
+              <div className="mb-4 rounded-lg bg-muted/50 p-4">
+                <div className="grid gap-3 md:grid-cols-5">
                   <div>
-                    <span className="text-muted-foreground">Presupuesto: </span>
-                    <span className="font-semibold">
-                      ${marcaResult.presupuesto.toLocaleString("es-ES", {
+                    <p className="text-xs text-muted-foreground">Marca</p>
+                    <p className="font-semibold text-foreground">
+                      {marcaResultado.marca}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Mes Destino</p>
+                    <p className="font-semibold text-foreground">
+                      {marcaResultado.mesDestino}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">
+                      Presupuesto Asignado
+                    </p>
+                    <p className="font-semibold text-foreground">
+                      $
+                      {marcaResultado.presupuesto.toLocaleString("es-ES", {
                         minimumFractionDigits: 2,
                         maximumFractionDigits: 2,
                       })}
-                    </span>
+                    </p>
                   </div>
                   <div>
-                    <span className="text-muted-foreground">Promedio Ref: </span>
-                    <span className="font-semibold">
-                      ${marcaResult.promedioVentaMesesReferencia.toLocaleString("es-ES", {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2,
-                      })}
-                    </span>
+                    <p className="text-xs text-muted-foreground">
+                      Promedio Ref.
+                    </p>
+                    <p className="font-semibold text-foreground">
+                      $
+                      {marcaResultado.promedioVentaMesesReferencia.toLocaleString(
+                        "es-ES",
+                        {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        }
+                      )}
+                    </p>
                   </div>
                   <div>
-                    <Badge variant={marcaResult.porcentajeCambio > 0 ? "default" : marcaResult.porcentajeCambio < 0 ? "destructive" : "secondary"}>
-                      {marcaResult.porcentajeCambio >= 0 ? "+" : ""}
-                      {marcaResult.porcentajeCambio.toFixed(2)}%
-                    </Badge>
+                    <p className="text-xs text-muted-foreground">
+                      % de Cambio
+                    </p>
+                    <p
+                      className={`flex items-center gap-1 font-semibold ${
+                        marcaResultado.porcentajeCambio >= 0
+                          ? "text-green-600"
+                          : "text-red-600"
+                      }`}
+                    >
+                      {marcaResultado.porcentajeCambio >= 0 ? (
+                        <ArrowUp className="h-4 w-4" />
+                      ) : (
+                        <ArrowDown className="h-4 w-4" />
+                      )}
+                      {Math.abs(marcaResultado.porcentajeCambio).toFixed(2)}%
+                    </p>
                   </div>
                 </div>
               </div>
-            </div>
 
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-muted/30">
-                  <TableHead className="font-semibold">Cliente</TableHead>
-                  <TableHead className="font-semibold">Artículo</TableHead>
-                  <TableHead className="text-right font-semibold">Venta Real</TableHead>
-                  <TableHead className="text-right font-semibold">Venta Ajustada</TableHead>
-                  <TableHead className="text-right font-semibold">Variación</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {marcaResult.distribucionClientes.map((cliente, clienteIdx) => (
-                  <>
-                    {cliente.articulos.map((articulo, articuloIdx) => {
-                      const variacion = articulo.ventaAjustada - articulo.ventaReal;
-                      const variacionPorcentaje =
-                        articulo.ventaReal > 0
-                          ? ((variacion / articulo.ventaReal) * 100).toFixed(2)
-                          : "0.00";
-
-                      return (
-                        <TableRow
-                          key={`${clienteIdx}-${articuloIdx}`}
-                          className="hover:bg-muted/50"
-                        >
-                          {articuloIdx === 0 && (
-                            <TableCell
-                              rowSpan={cliente.articulos.length}
-                              className="border-r border-border bg-muted/20 font-medium"
-                            >
-                              {cliente.cliente}
-                            </TableCell>
-                          )}
-                          <TableCell className="text-muted-foreground">
-                            {articulo.articulo}
-                          </TableCell>
-                          <TableCell className="text-right font-mono text-sm">
-                            ${articulo.ventaReal.toLocaleString("es-ES", {
-                              minimumFractionDigits: 2,
-                              maximumFractionDigits: 2,
-                            })}
-                          </TableCell>
-                          <TableCell className="text-right font-mono text-sm font-semibold">
-                            ${articulo.ventaAjustada.toLocaleString("es-ES", {
-                              minimumFractionDigits: 2,
-                              maximumFractionDigits: 2,
-                            })}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <Badge
-                              variant={
-                                variacion > 0 ? "default" : variacion < 0 ? "destructive" : "secondary"
-                              }
-                            >
-                              {variacion >= 0 ? "+" : ""}
-                              {variacionPorcentaje}%
-                            </Badge>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                    <TableRow className="border-t-2 border-primary/20 bg-primary/5">
-                      <TableCell colSpan={2} className="text-right font-semibold">
-                        Total {cliente.cliente}:
-                      </TableCell>
-                      <TableCell className="text-right font-mono text-sm">
-                        $
-                        {cliente.articulos
-                          .reduce((sum, art) => sum + art.ventaReal, 0)
-                          .toLocaleString("es-ES", {
-                            minimumFractionDigits: 2,
-                            maximumFractionDigits: 2,
-                          })}
-                      </TableCell>
-                      <TableCell className="text-right font-mono font-semibold">
-                        ${cliente.totalCliente.toLocaleString("es-ES", {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        })}
-                      </TableCell>
-                      <TableCell></TableCell>
+              <div className="overflow-x-auto rounded-md border border-border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Cliente</TableHead>
+                      <TableHead>Vendedor</TableHead>
+                      <TableHead>Artículo</TableHead>
+                      <TableHead className="text-right">Venta Real</TableHead>
+                      <TableHead className="text-right">
+                        Venta Ajustada
+                      </TableHead>
+                      <TableHead className="text-right">Variación</TableHead>
                     </TableRow>
-                  </>
-                ))}
-              </TableBody>
-            </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {marcaResultado.distribucionClientes.map(
+                      (cliente, clienteIdx) => (
+                        <>
+                          {cliente.articulos.map((articulo, articuloIdx) => (
+                            <TableRow key={`${clienteIdx}-${articuloIdx}`}>
+                              {articuloIdx === 0 && (
+                                <>
+                                  <TableCell
+                                    rowSpan={cliente.articulos.length}
+                                    className="font-medium"
+                                  >
+                                    {cliente.cliente}
+                                  </TableCell>
+                                  <TableCell
+                                    rowSpan={cliente.articulos.length}
+                                  >
+                                    {cliente.vendedor}
+                                  </TableCell>
+                                </>
+                              )}
+                              <TableCell>{articulo.articulo}</TableCell>
+                              <TableCell className="text-right">
+                                $
+                                {articulo.ventaReal.toLocaleString("es-ES", {
+                                  minimumFractionDigits: 2,
+                                  maximumFractionDigits: 2,
+                                })}
+                              </TableCell>
+                              <TableCell className="text-right font-medium">
+                                $
+                                {articulo.ventaAjustada.toLocaleString(
+                                  "es-ES",
+                                  {
+                                    minimumFractionDigits: 2,
+                                    maximumFractionDigits: 2,
+                                  }
+                                )}
+                              </TableCell>
+                              <TableCell
+                                className={`text-right ${
+                                  articulo.variacion >= 0
+                                    ? "text-green-600"
+                                    : "text-red-600"
+                                }`}
+                              >
+                                {articulo.variacion >= 0 ? "+" : ""}
+                                {articulo.variacion.toLocaleString("es-ES", {
+                                  minimumFractionDigits: 2,
+                                  maximumFractionDigits: 2,
+                                })}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                          <TableRow className="bg-muted/30">
+                            <TableCell
+                              colSpan={4}
+                              className="text-right font-semibold"
+                            >
+                              Subtotal {cliente.cliente}
+                            </TableCell>
+                            <TableCell className="text-right font-semibold">
+                              $
+                              {cliente.subtotal.toLocaleString("es-ES", {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              })}
+                            </TableCell>
+                            <TableCell></TableCell>
+                          </TableRow>
+                        </>
+                      )
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
 
-            {marcaIdx < result.resultadosMarcas.length - 1 && (
-              <Separator className="my-4" />
-            )}
-          </div>
-        ))}
-      </div>
-    </Card>
+              {index < resultadosFiltrados.length - 1 && (
+                <Separator className="my-6" />
+              )}
+            </div>
+          ))}
+
+          {resultadosFiltrados.length === 0 && (
+            <p className="py-8 text-center text-muted-foreground">
+              No se encontraron resultados con los filtros aplicados
+            </p>
+          )}
+        </div>
+      </Card>
+    </div>
   );
 };
