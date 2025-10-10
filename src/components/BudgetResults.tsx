@@ -23,7 +23,8 @@ export const BudgetResults = ({ result }: BudgetResultsProps) => {
   const [filtroCliente, setFiltroCliente] = useState("all");
   const [filtroMarca, setFiltroMarca] = useState("all");
   const [filtroArticulo, setFiltroArticulo] = useState("all");
-  const [filtroMes, setFiltroMes] = useState("all");
+  const [filtroFecha, setFiltroFecha] = useState("all");
+  const [filtroEmpresa, setFiltroEmpresa] = useState("all");
 
   // Obtener valores únicos para los filtros
   const vendedoresUnicos = Array.from(
@@ -46,8 +47,12 @@ export const BudgetResults = ({ result }: BudgetResultsProps) => {
     new Set(result.resultadosMarcas.map((m) => m.marca))
   );
 
-  const mesesUnicos = Array.from(
-    new Set(result.resultadosMarcas.map((m) => m.mesDestino))
+  const fechasUnicas = Array.from(
+    new Set(result.resultadosMarcas.map((m) => m.fechaDestino))
+  );
+
+  const empresasUnicas = Array.from(
+    new Set(result.resultadosMarcas.map((m) => m.empresa))
   );
 
   const articulosUnicos = Array.from(
@@ -63,12 +68,14 @@ export const BudgetResults = ({ result }: BudgetResultsProps) => {
   // Aplicar filtros
   const resultadosFiltrados = result.resultadosMarcas
     .filter((marca) => filtroMarca === "all" || marca.marca === filtroMarca)
-    .filter((marca) => filtroMes === "all" || marca.mesDestino === filtroMes)
+    .filter((marca) => filtroFecha === "all" || marca.fechaDestino === filtroFecha)
+    .filter((marca) => filtroEmpresa === "all" || marca.empresa === filtroEmpresa)
     .map((marca) => ({
       ...marca,
       distribucionClientes: marca.distribucionClientes
         .filter((cliente) => filtroVendedor === "all" || cliente.vendedor === filtroVendedor)
         .filter((cliente) => filtroCliente === "all" || cliente.cliente === filtroCliente)
+        .filter((cliente) => filtroEmpresa === "all" || cliente.empresa === filtroEmpresa)
         .map((cliente) => ({
           ...cliente,
           articulos: cliente.articulos.filter(
@@ -79,13 +86,23 @@ export const BudgetResults = ({ result }: BudgetResultsProps) => {
     }))
     .filter((marca) => marca.distribucionClientes.length > 0);
 
+  // Calcular totales filtrados
+  const totalPresupuestoFiltrado = resultadosFiltrados.reduce(
+    (sum, marca) => sum + marca.presupuesto,
+    0
+  );
+
+  const totalPromedioReferenciaFiltrado = resultadosFiltrados.length > 0
+    ? resultadosFiltrados.reduce((sum, marca) => sum + marca.promedioVentaMesesReferencia, 0) / resultadosFiltrados.length
+    : 0;
+
   const totalPresupuesto = result.totalPresupuesto;
 
   return (
     <div className="space-y-6">
       <Card className="p-6 shadow-md">
         <h3 className="mb-4 text-lg font-semibold text-foreground">Filtros</h3>
-        <div className="grid gap-4 md:grid-cols-5">
+        <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-6">
           <div className="space-y-2">
             <Label htmlFor="filtro-vendedor">Vendedor</Label>
             <Select value={filtroVendedor} onValueChange={setFiltroVendedor}>
@@ -155,20 +172,65 @@ export const BudgetResults = ({ result }: BudgetResultsProps) => {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="filtro-mes">Mes</Label>
-            <Select value={filtroMes} onValueChange={setFiltroMes}>
-              <SelectTrigger id="filtro-mes">
-                <SelectValue placeholder="Todos" />
+            <Label htmlFor="filtro-fecha">Fecha</Label>
+            <Select value={filtroFecha} onValueChange={setFiltroFecha}>
+              <SelectTrigger id="filtro-fecha">
+                <SelectValue placeholder="Todas" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">Todos</SelectItem>
-                {mesesUnicos.map((mes) => (
-                  <SelectItem key={mes} value={mes}>
-                    {mes}
+                <SelectItem value="all">Todas</SelectItem>
+                {fechasUnicas.map((fecha) => (
+                  <SelectItem key={fecha} value={fecha}>
+                    {fecha}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="filtro-empresa">Empresa</Label>
+            <Select value={filtroEmpresa} onValueChange={setFiltroEmpresa}>
+              <SelectTrigger id="filtro-empresa">
+                <SelectValue placeholder="Todas" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas</SelectItem>
+                {empresasUnicas.map((empresa) => (
+                  <SelectItem key={empresa} value={empresa}>
+                    {empresa}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        {/* Totales Filtrados */}
+        <div className="mt-4 grid gap-3 rounded-lg bg-muted/50 p-4 md:grid-cols-3">
+          <div>
+            <p className="text-xs text-muted-foreground">Presupuesto Filtrado</p>
+            <p className="text-lg font-semibold text-foreground">
+              ${totalPresupuestoFiltrado.toLocaleString("es-ES", {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              })}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground">Promedio Ref. Filtrado</p>
+            <p className="text-lg font-semibold text-foreground">
+              ${totalPromedioReferenciaFiltrado.toLocaleString("es-ES", {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              })}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground">Marcas Filtradas</p>
+            <p className="text-lg font-semibold text-foreground">
+              {resultadosFiltrados.length}
+            </p>
           </div>
         </div>
       </Card>
@@ -192,7 +254,7 @@ export const BudgetResults = ({ result }: BudgetResultsProps) => {
           {resultadosFiltrados.map((marcaResultado, index) => (
             <div key={index}>
               <div className="mb-4 rounded-lg bg-muted/50 p-4">
-                <div className="grid gap-3 md:grid-cols-5">
+                <div className="grid gap-3 md:grid-cols-3 lg:grid-cols-6">
                   <div>
                     <p className="text-xs text-muted-foreground">Marca</p>
                     <p className="font-semibold text-foreground">
@@ -200,9 +262,15 @@ export const BudgetResults = ({ result }: BudgetResultsProps) => {
                     </p>
                   </div>
                   <div>
-                    <p className="text-xs text-muted-foreground">Mes Destino</p>
+                    <p className="text-xs text-muted-foreground">Fecha Destino</p>
                     <p className="font-semibold text-foreground">
-                      {marcaResultado.mesDestino}
+                      {marcaResultado.fechaDestino}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Empresa</p>
+                    <p className="font-semibold text-foreground">
+                      {marcaResultado.empresa}
                     </p>
                   </div>
                   <div>
@@ -260,6 +328,7 @@ export const BudgetResults = ({ result }: BudgetResultsProps) => {
                     <TableRow>
                       <TableHead>Cliente</TableHead>
                       <TableHead>Vendedor</TableHead>
+                      <TableHead>Empresa</TableHead>
                       <TableHead>Artículo</TableHead>
                       <TableHead className="text-right">Venta Real</TableHead>
                       <TableHead className="text-right">
@@ -286,6 +355,11 @@ export const BudgetResults = ({ result }: BudgetResultsProps) => {
                                     rowSpan={cliente.articulos.length}
                                   >
                                     {cliente.vendedor}
+                                  </TableCell>
+                                  <TableCell
+                                    rowSpan={cliente.articulos.length}
+                                  >
+                                    {cliente.empresa}
                                   </TableCell>
                                 </>
                               )}
@@ -324,7 +398,7 @@ export const BudgetResults = ({ result }: BudgetResultsProps) => {
                           ))}
                           <TableRow className="bg-muted/30">
                             <TableCell
-                              colSpan={4}
+                              colSpan={5}
                               className="text-right font-semibold"
                             >
                               Subtotal {cliente.cliente}

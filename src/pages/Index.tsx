@@ -6,11 +6,12 @@ import { MetricsCard } from "@/components/MetricsCard";
 import { Calculator, TrendingUp, Calendar, Users } from "lucide-react";
 import { toast } from "sonner";
 
-// Datos de ejemplo simulados - Ventas por marca, cliente, artículo, vendedor y mes-año
+// Datos de ejemplo simulados - Ventas por marca, cliente, artículo, vendedor, empresa y mes-año
 const MOCK_DATA = {
   marcas: ["Nike", "Adidas", "Puma", "Reebok", "New Balance"],
   clientes: ["Cliente A", "Cliente B", "Cliente C", "Cliente D"],
   vendedores: ["Vendedor 1", "Vendedor 2", "Vendedor 3"],
+  empresas: ["Empresa Alpha", "Empresa Beta", "Empresa Gamma"],
   articulos: {
     Nike: ["Nike Air Max", "Nike React", "Nike Zoom"],
     Adidas: ["Adidas Ultraboost", "Adidas NMD", "Adidas Superstar"],
@@ -24,6 +25,7 @@ const MOCK_DATA = {
     cliente: string;
     articulo: string;
     vendedor: string;
+    empresa: string;
     venta: number;
   }>,
 };
@@ -51,12 +53,14 @@ mesesDisponibles.forEach((mesAnio) => {
     MOCK_DATA.clientes.forEach((cliente) => {
       MOCK_DATA.articulos[marca]?.forEach((articulo) => {
         const vendedor = MOCK_DATA.vendedores[Math.floor(Math.random() * MOCK_DATA.vendedores.length)];
+        const empresa = MOCK_DATA.empresas[Math.floor(Math.random() * MOCK_DATA.empresas.length)];
         MOCK_DATA.ventas.push({
           mesAnio,
           marca,
           cliente,
           articulo,
           vendedor,
+          empresa,
           venta: Math.random() * 10000 + 5000,
         });
       });
@@ -66,7 +70,8 @@ mesesDisponibles.forEach((mesAnio) => {
 
 export interface MarcaPresupuesto {
   marca: string;
-  mesDestino: string;
+  fechaDestino: string;
+  empresa: string;
   presupuesto: number;
 }
 
@@ -75,13 +80,15 @@ export interface CalculationResult {
   promedioVentaReferencia: number;
   resultadosMarcas: Array<{
     marca: string;
-    mesDestino: string;
+    fechaDestino: string;
+    empresa: string;
     presupuesto: number;
     promedioVentaMesesReferencia: number;
     porcentajeCambio: number;
     distribucionClientes: Array<{
       cliente: string;
       vendedor: string;
+      empresa: string;
       articulos: Array<{
         articulo: string;
         ventaReal: number;
@@ -94,7 +101,8 @@ export interface CalculationResult {
   errores: Array<{
     tipo: number;
     marca: string;
-    mesDestino: string;
+    fechaDestino: string;
+    empresa: string;
     mensaje: string;
   }>;
 }
@@ -113,22 +121,23 @@ const Index = () => {
     let totalPromedioReferenciaGeneral = 0;
 
     marcasPresupuesto.forEach((marcaPresupuesto) => {
-      const { marca, mesDestino, presupuesto } = marcaPresupuesto;
+      const { marca, fechaDestino, empresa, presupuesto } = marcaPresupuesto;
 
       // Validación Error 1: Marca no existe
       if (!MOCK_DATA.marcas.includes(marca)) {
         errores.push({
           tipo: 1,
           marca,
-          mesDestino,
+          fechaDestino,
+          empresa,
           mensaje: `La marca "${marca}" no existe en el maestro de marcas`,
         });
         return;
       }
 
-      // Obtener ventas de los meses de referencia para esta marca
+      // Obtener ventas de los meses de referencia para esta marca y empresa
       const ventasMesesReferencia = MOCK_DATA.ventas.filter(
-        (v) => mesesReferencia.includes(v.mesAnio) && v.marca === marca
+        (v) => mesesReferencia.includes(v.mesAnio) && v.marca === marca && v.empresa === empresa
       );
 
       // Validación Error 4: Marca sin ventas en meses de referencia
@@ -136,8 +145,9 @@ const Index = () => {
         errores.push({
           tipo: 4,
           marca,
-          mesDestino,
-          mensaje: `La marca "${marca}" no tiene ventas en los meses de referencia seleccionados`,
+          fechaDestino,
+          empresa,
+          mensaje: `La marca "${marca}" de la empresa "${empresa}" no tiene ventas en los meses de referencia seleccionados`,
         });
         return;
       }
@@ -151,8 +161,9 @@ const Index = () => {
         errores.push({
           tipo: 3,
           marca,
-          mesDestino,
-          mensaje: `Falta de venta para distribución del presupuesto de la marca "${marca}"`,
+          fechaDestino,
+          empresa,
+          mensaje: `Falta de venta para distribución del presupuesto de la marca "${marca}" en la empresa "${empresa}"`,
         });
         return;
       }
@@ -162,13 +173,14 @@ const Index = () => {
       const porcentajeCambio = ((factorMarca - 1) * 100);
 
       // Agrupar ventas por cliente para esta marca
-      const ventasPorCliente = new Map<string, { cliente: string; vendedor: string; ventas: typeof MOCK_DATA.ventas }>();
+      const ventasPorCliente = new Map<string, { cliente: string; vendedor: string; empresa: string; ventas: typeof MOCK_DATA.ventas }>();
 
       ventasMesesReferencia.forEach((venta) => {
         if (!ventasPorCliente.has(venta.cliente)) {
           ventasPorCliente.set(venta.cliente, {
             cliente: venta.cliente,
             vendedor: venta.vendedor,
+            empresa: venta.empresa,
             ventas: [],
           });
         }
@@ -204,6 +216,7 @@ const Index = () => {
         return {
           cliente: clienteData.cliente,
           vendedor: clienteData.vendedor,
+          empresa: clienteData.empresa,
           articulos,
           subtotal,
         };
@@ -211,7 +224,8 @@ const Index = () => {
 
       resultadosMarcas.push({
         marca,
-        mesDestino,
+        fechaDestino,
+        empresa,
         presupuesto,
         promedioVentaMesesReferencia: promedioVentaMarca,
         porcentajeCambio,
@@ -276,7 +290,11 @@ const Index = () => {
             <Card className="p-6 shadow-md">
           <BudgetForm
             onCalculate={handleCalculate}
-            mockData={MOCK_DATA}
+            mockData={{
+              marcas: MOCK_DATA.marcas,
+              empresas: MOCK_DATA.empresas,
+              articulos: MOCK_DATA.articulos,
+            }}
             mesesDisponibles={mesesDisponibles}
             onMarcasPresupuestoLoad={setMarcasPresupuesto}
           />

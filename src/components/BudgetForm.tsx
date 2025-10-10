@@ -24,6 +24,7 @@ interface BudgetFormProps {
   ) => void;
   mockData: {
     marcas: string[];
+    empresas: string[];
     articulos: Record<string, string[]>;
   };
   mesesDisponibles: string[];
@@ -33,8 +34,10 @@ interface BudgetFormProps {
 export const BudgetForm = ({ onCalculate, mockData, mesesDisponibles, onMarcasPresupuestoLoad }: BudgetFormProps) => {
   const [mesesReferencia, setMesesReferencia] = useState<string[]>([]);
   const [marcasPresupuesto, setMarcasPresupuesto] = useState<MarcaPresupuesto[]>([]);
+  const [marcasConError, setMarcasConError] = useState<Array<{ marca: string; error: string }>>([]);
   const [excelFileName, setExcelFileName] = useState("");
   const [showMarcasCargadas, setShowMarcasCargadas] = useState(false);
+  const [showMarcasError, setShowMarcasError] = useState(false);
 
   const handleMesToggle = (mesAnio: string) => {
     setMesesReferencia((prev) =>
@@ -74,8 +77,14 @@ export const BudgetForm = ({ onCalculate, mockData, mesesDisponibles, onMarcasPr
           e.target.value = "";
           return;
         }
-        if (!firstRow.Mes && !firstRow.mes) {
-          toast.error("El archivo Excel debe tener una columna 'Mes'");
+        if (!firstRow.Fecha && !firstRow.fecha) {
+          toast.error("El archivo Excel debe tener una columna 'Fecha' (formato: YYYY/MM/DD)");
+          setExcelFileName("");
+          e.target.value = "";
+          return;
+        }
+        if (!firstRow.Empresa && !firstRow.empresa) {
+          toast.error("El archivo Excel debe tener una columna 'Empresa'");
           setExcelFileName("");
           e.target.value = "";
           return;
@@ -87,31 +96,54 @@ export const BudgetForm = ({ onCalculate, mockData, mesesDisponibles, onMarcasPr
           return;
         }
 
-        // Parsear datos
-        const marcasFromExcel: MarcaPresupuesto[] = jsonData.map((row) => ({
-          marca: row.Marca || row.marca,
-          mesDestino: row.Mes || row.mes,
-          presupuesto: parseFloat(row.Presupuesto || row.presupuesto),
-        })).filter(item => item.marca && item.mesDestino && !isNaN(item.presupuesto));
-
-        if (marcasFromExcel.length === 0) {
-          toast.error("No se encontraron datos válidos en el archivo");
-          setExcelFileName("");
-          e.target.value = "";
-          return;
-        }
+        // Parsear datos y validar formato de fecha
+        const marcasFromExcel: MarcaPresupuesto[] = [];
+        const errores: Array<{ marca: string; error: string }> = [];
+        
+        jsonData.forEach((row) => {
+          const marca = row.Marca || row.marca;
+          const fechaDestino = row.Fecha || row.fecha;
+          const empresa = row.Empresa || row.empresa;
+          const presupuesto = parseFloat(row.Presupuesto || row.presupuesto);
+          
+          // Validar que todos los campos estén presentes
+          if (!marca || !fechaDestino || !empresa || isNaN(presupuesto)) {
+            if (marca) {
+              errores.push({ marca, error: "Datos incompletos" });
+            }
+            return;
+          }
+          
+          // Validar formato de fecha YYYY/MM/DD
+          const fechaRegex = /^\d{4}\/\d{2}\/\d{2}$/;
+          if (!fechaRegex.test(fechaDestino)) {
+            errores.push({ marca, error: "Formato de fecha inválido (use YYYY/MM/DD)" });
+            return;
+          }
+          
+          marcasFromExcel.push({
+            marca,
+            fechaDestino,
+            empresa,
+            presupuesto,
+          });
+        });
 
         // Validar que las marcas existan en el maestro
-        const marcasInvalidas = marcasFromExcel.filter(
-          (item) => !mockData.marcas.includes(item.marca)
-        );
+        marcasFromExcel.forEach((item) => {
+          if (!mockData.marcas.includes(item.marca)) {
+            errores.push({ marca: item.marca, error: "Marca no existe en el maestro" });
+          }
+          if (!mockData.empresas.includes(item.empresa)) {
+            errores.push({ marca: item.marca, error: `Empresa "${item.empresa}" no existe` });
+          }
+        });
 
-        if (marcasInvalidas.length > 0) {
-          toast.error(
-            `Error 1: Las siguientes marcas no existen en el maestro: ${marcasInvalidas
-              .map((m) => m.marca)
-              .join(", ")}`
-          );
+        // Guardar marcas con errores
+        setMarcasConError(errores);
+
+        if (marcasFromExcel.length === 0 && errores.length > 0) {
+          toast.error("No se encontraron datos válidos en el archivo");
           setExcelFileName("");
           e.target.value = "";
           return;
@@ -119,9 +151,16 @@ export const BudgetForm = ({ onCalculate, mockData, mesesDisponibles, onMarcasPr
 
         setMarcasPresupuesto(marcasFromExcel);
         onMarcasPresupuestoLoad(marcasFromExcel);
-        toast.success(
-          `Archivo cargado correctamente: ${marcasFromExcel.length} marca(s) con presupuesto`
-        );
+        
+        if (errores.length > 0) {
+          toast.warning(
+            `Archivo cargado con ${marcasFromExcel.length} marca(s) válida(s) y ${errores.length} error(es)`
+          );
+        } else {
+          toast.success(
+            `Archivo cargado correctamente: ${marcasFromExcel.length} marca(s) con presupuesto`
+          );
+        }
       } catch (error) {
         toast.error("Error al procesar el archivo Excel");
         setExcelFileName("");
@@ -141,20 +180,23 @@ export const BudgetForm = ({ onCalculate, mockData, mesesDisponibles, onMarcasPr
 
   const handleRemoveExcel = () => {
     setMarcasPresupuesto([]);
+    setMarcasConError([]);
     setExcelFileName("");
     onMarcasPresupuestoLoad([]);
     const fileInput = document.getElementById("excel-upload") as HTMLInputElement;
     if (fileInput) fileInput.value = "";
     setShowMarcasCargadas(false);
+    setShowMarcasError(false);
     toast.info("Archivo Excel removido");
   };
 
   const handleDownloadTemplate = () => {
-    // Crear array con las marcas disponibles y columnas de Mes y Presupuesto vacías
-    const templateData = mockData.marcas.map((marca) => ({
+    // Crear array con las marcas disponibles y columnas de Fecha, Empresa y Presupuesto con ejemplos
+    const templateData = mockData.marcas.map((marca, index) => ({
       Marca: marca,
-      Mes: "",
-      Presupuesto: "",
+      Fecha: index === 0 ? "2025/12/31" : "",
+      Empresa: index === 0 ? mockData.empresas[0] : "",
+      Presupuesto: index === 0 ? "100000" : "",
     }));
 
     // Crear libro de Excel
@@ -176,7 +218,7 @@ export const BudgetForm = ({ onCalculate, mockData, mesesDisponibles, onMarcasPr
     }
 
     if (marcasPresupuesto.length === 0) {
-      toast.error("Por favor cargue un archivo Excel con marcas, meses y presupuestos");
+      toast.error("Por favor cargue un archivo Excel con marcas, fechas, empresas y presupuestos");
       return;
     }
 
@@ -217,7 +259,23 @@ export const BudgetForm = ({ onCalculate, mockData, mesesDisponibles, onMarcasPr
                 <span className="ml-2 text-muted-foreground">
                   ({marcasPresupuesto.length} marca{marcasPresupuesto.length !== 1 ? "s" : ""})
                 </span>
+                {marcasConError.length > 0 && (
+                  <span className="ml-2 text-destructive">
+                    ({marcasConError.length} error{marcasConError.length !== 1 ? "es" : ""})
+                  </span>
+                )}
               </div>
+              {marcasConError.length > 0 && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setShowMarcasError(!showMarcasError)}
+                  className="h-8 w-8"
+                >
+                  <Eye className="h-4 w-4 text-destructive" />
+                </Button>
+              )}
               <Button
                 type="button"
                 variant="ghost"
@@ -237,6 +295,32 @@ export const BudgetForm = ({ onCalculate, mockData, mesesDisponibles, onMarcasPr
                 <X className="h-4 w-4" />
               </Button>
             </div>
+            
+            {marcasConError.length > 0 && (
+              <Collapsible open={showMarcasError} onOpenChange={setShowMarcasError}>
+                <CollapsibleContent>
+                  <div className="rounded-md border border-destructive bg-destructive/10">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Marca</TableHead>
+                          <TableHead>Error</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {marcasConError.map((item, index) => (
+                          <TableRow key={index}>
+                            <TableCell className="font-medium">{item.marca}</TableCell>
+                            <TableCell className="text-destructive">{item.error}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </CollapsibleContent>
+              </Collapsible>
+            )}
+            
             <Collapsible open={showMarcasCargadas} onOpenChange={setShowMarcasCargadas}>
               <CollapsibleContent>
                 <div className="rounded-md border border-border">
@@ -244,7 +328,8 @@ export const BudgetForm = ({ onCalculate, mockData, mesesDisponibles, onMarcasPr
                     <TableHeader>
                       <TableRow>
                         <TableHead>Marca</TableHead>
-                        <TableHead>Mes</TableHead>
+                        <TableHead>Fecha</TableHead>
+                        <TableHead>Empresa</TableHead>
                         <TableHead className="text-right">Presupuesto</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -252,7 +337,8 @@ export const BudgetForm = ({ onCalculate, mockData, mesesDisponibles, onMarcasPr
                       {marcasPresupuesto.map((item, index) => (
                         <TableRow key={index}>
                           <TableCell className="font-medium">{item.marca}</TableCell>
-                          <TableCell>{item.mesDestino}</TableCell>
+                          <TableCell>{item.fechaDestino}</TableCell>
+                          <TableCell>{item.empresa}</TableCell>
                           <TableCell className="text-right">
                             ${item.presupuesto.toLocaleString("es-ES", {
                               minimumFractionDigits: 2,
@@ -282,7 +368,7 @@ export const BudgetForm = ({ onCalculate, mockData, mesesDisponibles, onMarcasPr
           </div>
         )}
         <p className="text-xs text-muted-foreground">
-          Formato: Columnas "Marca", "Mes" y "Presupuesto"
+          Formato: Columnas "Marca", "Fecha" (YYYY/MM/DD), "Empresa" y "Presupuesto"
         </p>
       </div>
 
