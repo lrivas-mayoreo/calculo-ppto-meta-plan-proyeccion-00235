@@ -27,7 +27,7 @@ export const FormulaExplanation = () => {
         <div>
           <h4 className="font-medium text-foreground mb-2">3. Distribución por Artículo</h4>
           <p className="font-mono bg-muted p-2 rounded">
-            Venta Ajustada = Venta Promedio del Artículo × Factor
+            PPTO Venta Ajustada = Venta Promedio del Artículo × Factor
           </p>
         </div>
 
