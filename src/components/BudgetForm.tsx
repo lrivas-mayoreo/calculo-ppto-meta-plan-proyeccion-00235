@@ -2,20 +2,15 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Calculator, Upload, X, Download, Eye } from "lucide-react";
+import { Calculator, Upload, X, Download, Eye, Info } from "lucide-react";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
 import type { MarcaPresupuesto } from "@/pages/Index";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible";
+import { Badge } from "@/components/ui/badge";
+import { parseDateFromExcel, formatDateToYYYYMMDD, detectDateFormat } from "@/lib/dateUtils";
 
 interface BudgetFormProps {
   onCalculate: (
@@ -34,10 +29,11 @@ interface BudgetFormProps {
 export const BudgetForm = ({ onCalculate, mockData, mesesDisponibles, onMarcasPresupuestoLoad }: BudgetFormProps) => {
   const [mesesReferencia, setMesesReferencia] = useState<string[]>([]);
   const [marcasPresupuesto, setMarcasPresupuesto] = useState<MarcaPresupuesto[]>([]);
-  const [marcasConError, setMarcasConError] = useState<Array<{ marca: string; error: string }>>([]);
+  const [marcasConError, setMarcasConError] = useState<Array<{ marca: string; fechaDestino: string; empresa: string; presupuesto: number; error: string }>>([]);
   const [excelFileName, setExcelFileName] = useState("");
   const [showMarcasCargadas, setShowMarcasCargadas] = useState(false);
   const [showMarcasError, setShowMarcasError] = useState(false);
+  const [dateFormatPreview, setDateFormatPreview] = useState<string>("");
 
   const handleMesToggle = (mesAnio: string) => {
     setMesesReferencia((prev) =>
@@ -98,26 +94,60 @@ export const BudgetForm = ({ onCalculate, mockData, mesesDisponibles, onMarcasPr
 
         // Parsear datos y validar formato de fecha
         const marcasFromExcel: MarcaPresupuesto[] = [];
-        const errores: Array<{ marca: string; error: string }> = [];
+        const errores: Array<{ marca: string; fechaDestino: string; empresa: string; presupuesto: number; error: string }> = [];
+        let detectedFormat = "";
         
-        jsonData.forEach((row) => {
+        jsonData.forEach((row, index) => {
           const marca = row.Marca || row.marca;
-          const fechaDestino = row.Fecha || row.fecha;
+          const fechaRaw = (row.Fecha || row.fecha)?.toString().trim() || "";
           const empresa = row.Empresa || row.empresa;
           const presupuesto = parseFloat(row.Presupuesto || row.presupuesto);
+          
+          // Detect date format from first valid row
+          if (index === 0 && fechaRaw) {
+            detectedFormat = detectDateFormat(fechaRaw);
+            setDateFormatPreview(detectedFormat);
+          }
+
+          // Parse date dynamically
+          const parsedDate = parseDateFromExcel(fechaRaw);
+          const fechaDestino = parsedDate ? formatDateToYYYYMMDD(parsedDate) : "";
           
           // Validar que todos los campos estén presentes
           if (!marca || !fechaDestino || !empresa || isNaN(presupuesto)) {
             if (marca) {
-              errores.push({ marca, error: "Datos incompletos" });
+              errores.push({ 
+                marca, 
+                fechaDestino: fechaRaw || "Sin fecha",
+                empresa: empresa || "Sin empresa",
+                presupuesto: presupuesto || 0,
+                error: fechaDestino ? "Datos incompletos" : "Formato de fecha inválido"
+              });
             }
             return;
           }
           
-          // Validar formato de fecha YYYY/MM/DD
-          const fechaRegex = /^\d{4}\/\d{2}\/\d{2}$/;
-          if (!fechaRegex.test(fechaDestino)) {
-            errores.push({ marca, error: "Formato de fecha inválido (use YYYY/MM/DD)" });
+          // Validar que la marca exista en el maestro
+          if (!mockData.marcas.includes(marca)) {
+            errores.push({ 
+              marca, 
+              fechaDestino,
+              empresa,
+              presupuesto,
+              error: "Marca no existe en el maestro"
+            });
+            return;
+          }
+
+          // Validar que la empresa exista en el maestro
+          if (!mockData.empresas.includes(empresa)) {
+            errores.push({ 
+              marca, 
+              fechaDestino,
+              empresa,
+              presupuesto,
+              error: `Empresa "${empresa}" no existe`
+            });
             return;
           }
           
@@ -127,16 +157,6 @@ export const BudgetForm = ({ onCalculate, mockData, mesesDisponibles, onMarcasPr
             empresa,
             presupuesto,
           });
-        });
-
-        // Validar que las marcas existan en el maestro
-        marcasFromExcel.forEach((item) => {
-          if (!mockData.marcas.includes(item.marca)) {
-            errores.push({ marca: item.marca, error: "Marca no existe en el maestro" });
-          }
-          if (!mockData.empresas.includes(item.empresa)) {
-            errores.push({ marca: item.marca, error: `Empresa "${item.empresa}" no existe` });
-          }
         });
 
         // Guardar marcas con errores
@@ -158,7 +178,7 @@ export const BudgetForm = ({ onCalculate, mockData, mesesDisponibles, onMarcasPr
           );
         } else {
           toast.success(
-            `Archivo cargado correctamente: ${marcasFromExcel.length} marca(s) con presupuesto`
+            `${marcasFromExcel.length} marcas cargadas (Formato: ${detectedFormat})`
           );
         }
       } catch (error) {
@@ -302,8 +322,11 @@ export const BudgetForm = ({ onCalculate, mockData, mesesDisponibles, onMarcasPr
                   <div className="rounded-md border border-destructive bg-destructive/10">
                     <Table>
                       <TableHeader>
-                        <TableRow>
+                       <TableRow>
                           <TableHead>Marca</TableHead>
+                          <TableHead>Fecha</TableHead>
+                          <TableHead>Empresa</TableHead>
+                          <TableHead className="text-right">Presupuesto</TableHead>
                           <TableHead>Error</TableHead>
                         </TableRow>
                       </TableHeader>
@@ -311,6 +334,14 @@ export const BudgetForm = ({ onCalculate, mockData, mesesDisponibles, onMarcasPr
                         {marcasConError.map((item, index) => (
                           <TableRow key={index}>
                             <TableCell className="font-medium">{item.marca}</TableCell>
+                            <TableCell>{item.fechaDestino}</TableCell>
+                            <TableCell>{item.empresa}</TableCell>
+                            <TableCell className="text-right">
+                              ${item.presupuesto.toLocaleString("es-ES", {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              })}
+                            </TableCell>
                             <TableCell className="text-destructive">{item.error}</TableCell>
                           </TableRow>
                         ))}
@@ -368,9 +399,18 @@ export const BudgetForm = ({ onCalculate, mockData, mesesDisponibles, onMarcasPr
           </div>
         )}
         <p className="text-xs text-muted-foreground">
-          Formato: Columnas "Marca", "Fecha" (YYYY/MM/DD), "Empresa" y "Presupuesto"
+          Formato: Columnas "Marca", "Fecha" (DD/MM/YYYY o YYYY/MM/DD), "Empresa" y "Presupuesto"
         </p>
       </div>
+
+      {dateFormatPreview && (
+        <div className="flex items-center gap-2 p-3 bg-muted rounded-lg">
+          <Info className="h-4 w-4 text-primary" />
+          <span className="text-sm text-muted-foreground">
+            Formato detectado: <Badge variant="outline">{dateFormatPreview}</Badge>
+          </span>
+        </div>
+      )}
 
       <div className="space-y-3">
         <Label>Meses de Referencia (Mes-Año) *</Label>

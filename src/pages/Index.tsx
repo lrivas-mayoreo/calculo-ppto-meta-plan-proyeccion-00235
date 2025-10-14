@@ -1,10 +1,16 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { Card } from "@/components/ui/card";
 import { BudgetForm } from "@/components/BudgetForm";
 import { BudgetResults } from "@/components/BudgetResults";
 import { MetricsCard } from "@/components/MetricsCard";
-import { Calculator, TrendingUp, Calendar, Users } from "lucide-react";
+import { VendorAdjustment } from "@/components/VendorAdjustment";
+import { FormulaExplanation } from "@/components/FormulaExplanation";
+import { Calculator, TrendingUp, Calendar, Users, LogOut } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
+import type { Session, User } from "@supabase/supabase-js";
 
 // Datos de ejemplo simulados - Ventas por marca, cliente, artículo, vendedor, empresa y mes-año
 const MOCK_DATA = {
@@ -108,8 +114,39 @@ export interface CalculationResult {
 }
 
 const Index = () => {
+  const navigate = useNavigate();
+  const [session, setSession] = useState<Session | null>(null);
+  const [user, setUser] = useState<User | null>(null);
   const [result, setResult] = useState<CalculationResult | null>(null);
   const [marcasPresupuesto, setMarcasPresupuesto] = useState<MarcaPresupuesto[]>([]);
+  const [vendorAdjustments, setVendorAdjustments] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      setSession(session);
+      setUser(session?.user ?? null);
+      
+      if (!session) {
+        navigate("/auth");
+      }
+    });
+
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setUser(session?.user ?? null);
+      
+      if (!session) {
+        navigate("/auth");
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, [navigate]);
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+    navigate("/auth");
+  };
 
   const handleCalculate = (
     marcasPresupuesto: MarcaPresupuesto[],
@@ -264,21 +301,44 @@ const Index = () => {
     setResult(resultadoFinal);
   };
 
+  if (!session || !user) {
+    return null;
+  }
+
+  const vendedoresUnicos = Array.from(
+    new Set(
+      result?.resultadosMarcas.flatMap((m) =>
+        m.distribucionClientes.map((c) => c.vendedor)
+      ) || []
+    )
+  );
+
   return (
     <div className="min-h-screen bg-background">
       <header className="border-b border-border bg-card shadow-sm">
         <div className="container mx-auto px-4 py-6">
-          <div className="flex items-center gap-3">
-            <div className="rounded-lg bg-primary p-2.5">
-              <Calculator className="h-6 w-6 text-primary-foreground" />
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="rounded-lg bg-primary p-2.5">
+                <Calculator className="h-6 w-6 text-primary-foreground" />
+              </div>
+              <div>
+                <h1 className="text-2xl font-bold text-foreground">
+                  Sistema de Cálculo de Presupuestos
+                </h1>
+                <p className="text-sm text-muted-foreground">
+                  Análisis dinámico basado en datos históricos de ventas
+                </p>
+              </div>
             </div>
-            <div>
-              <h1 className="text-2xl font-bold text-foreground">
-                Sistema de Cálculo de Presupuestos
-              </h1>
-              <p className="text-sm text-muted-foreground">
-                Análisis dinámico basado en datos históricos de ventas
-              </p>
+            <div className="flex items-center gap-4">
+              <span className="text-sm text-muted-foreground">
+                {user.email}
+              </span>
+              <Button variant="outline" size="sm" onClick={handleSignOut}>
+                <LogOut className="h-4 w-4 mr-2" />
+                Cerrar Sesión
+              </Button>
             </div>
           </div>
         </div>
@@ -304,6 +364,15 @@ const Index = () => {
           <div className="lg:col-span-2">
             {result ? (
               <div className="space-y-6">
+                {vendedoresUnicos.length > 0 && (
+                  <Card className="p-4">
+                    <VendorAdjustment 
+                      vendedores={vendedoresUnicos}
+                      onAdjust={setVendorAdjustments}
+                    />
+                  </Card>
+                )}
+                
                 <div className="grid gap-4 md:grid-cols-4">
                   <MetricsCard
                     title="Presupuesto Total"
@@ -361,6 +430,8 @@ const Index = () => {
             )}
           </div>
         </div>
+
+        <FormulaExplanation />
       </main>
     </div>
   );
