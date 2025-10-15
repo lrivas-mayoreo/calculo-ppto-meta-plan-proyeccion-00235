@@ -1,12 +1,15 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BudgetForm } from "@/components/BudgetForm";
 import { BudgetResults } from "@/components/BudgetResults";
 import { MetricsCard } from "@/components/MetricsCard";
 import { VendorAdjustment } from "@/components/VendorAdjustment";
+import { VendorClientTable } from "@/components/VendorClientTable";
+import { RoleManagement } from "@/components/RoleManagement";
 import { FormulaExplanation } from "@/components/FormulaExplanation";
-import { Calculator, TrendingUp, Calendar, Users, LogOut } from "lucide-react";
+import { Calculator, TrendingUp, Calendar, Users, LogOut, Shield } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -117,26 +120,45 @@ const Index = () => {
   const navigate = useNavigate();
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
+  const [userRole, setUserRole] = useState<string | null>(null);
   const [result, setResult] = useState<CalculationResult | null>(null);
   const [marcasPresupuesto, setMarcasPresupuesto] = useState<MarcaPresupuesto[]>([]);
-  const [vendorAdjustments, setVendorAdjustments] = useState<Record<string, number>>({});
+  const [vendorAdjustments, setVendorAdjustments] = useState<Record<string, { value: number; type: "percentage" | "currency" }>>({});
 
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       setSession(session);
       setUser(session?.user ?? null);
       
       if (!session) {
         navigate("/auth");
+      } else {
+        // Load user role
+        const { data: roleData } = await supabase
+          .from("user_roles")
+          .select("role")
+          .eq("user_id", session.user.id)
+          .maybeSingle();
+        
+        setUserRole(roleData?.role || null);
       }
     });
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
       
       if (!session) {
         navigate("/auth");
+      } else {
+        // Load user role
+        const { data: roleData } = await supabase
+          .from("user_roles")
+          .select("role")
+          .eq("user_id", session.user.id)
+          .maybeSingle();
+        
+        setUserRole(roleData?.role || null);
       }
     });
 
@@ -363,54 +385,82 @@ const Index = () => {
 
           <div className="lg:col-span-2">
             {result ? (
-              <div className="space-y-6">
-                {vendedoresUnicos.length > 0 && (
-                  <Card className="p-4">
-                    <VendorAdjustment 
-                      vendedores={vendedoresUnicos}
-                      onAdjust={setVendorAdjustments}
+              <Tabs defaultValue="results" className="space-y-6">
+                <TabsList className="grid w-full grid-cols-3">
+                  <TabsTrigger value="results">Resultados</TabsTrigger>
+                  <TabsTrigger value="vendors">Vendedores-Clientes</TabsTrigger>
+                  {userRole === "administrador" && (
+                    <TabsTrigger value="roles">
+                      <Shield className="h-4 w-4 mr-2" />
+                      Roles
+                    </TabsTrigger>
+                  )}
+                </TabsList>
+
+                <TabsContent value="results" className="space-y-6">
+                  {vendedoresUnicos.length > 0 && (
+                    <Card className="p-4">
+                      <VendorAdjustment 
+                        vendedores={vendedoresUnicos}
+                        presupuestoTotal={result.totalPresupuesto}
+                        onAdjust={setVendorAdjustments}
+                      />
+                    </Card>
+                  )}
+                  
+                  <div className="grid gap-4 md:grid-cols-4">
+                    <MetricsCard
+                      title="Presupuesto Total"
+                      value={`$${result.totalPresupuesto.toLocaleString("es-ES", {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })}`}
+                      icon={TrendingUp}
+                      trend="neutral"
                     />
-                  </Card>
-                )}
-                
-                <div className="grid gap-4 md:grid-cols-4">
-                  <MetricsCard
-                    title="Presupuesto Total"
-                    value={`$${result.totalPresupuesto.toLocaleString("es-ES", {
+                    <MetricsCard
+                      title="Marcas Calculadas"
+                      value={result.resultadosMarcas.length.toString()}
+                      icon={Calculator}
+                      trend="positive"
+                      subtitle="Con presupuesto"
+                    />
+                    <MetricsCard
+                      title="Promedio General"
+                      value={`$${result.promedioVentaReferencia.toLocaleString("es-ES", {
                         minimumFractionDigits: 2,
                         maximumFractionDigits: 2,
                       })}`}
-                    icon={TrendingUp}
-                    trend="neutral"
-                  />
-                  <MetricsCard
-                    title="Marcas Calculadas"
-                    value={result.resultadosMarcas.length.toString()}
-                    icon={Calculator}
-                    trend="positive"
-                    subtitle="Con presupuesto"
-                  />
-                  <MetricsCard
-                    title="Promedio General"
-                    value={`$${result.promedioVentaReferencia.toLocaleString("es-ES", {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    })}`}
-                    icon={Calendar}
-                    trend="neutral"
-                    subtitle="Meses referencia"
-                  />
-                  <MetricsCard
-                    title="Errores"
-                    value={result.errores.length.toString()}
-                    icon={Users}
-                    trend={result.errores.length > 0 ? "negative" : "positive"}
-                    subtitle="Marcas con error"
-                  />
-                </div>
+                      icon={Calendar}
+                      trend="neutral"
+                      subtitle="Meses referencia"
+                    />
+                    <MetricsCard
+                      title="Errores"
+                      value={result.errores.length.toString()}
+                      icon={Users}
+                      trend={result.errores.length > 0 ? "negative" : "positive"}
+                      subtitle="Marcas con error"
+                    />
+                  </div>
 
-                <BudgetResults result={result} />
-              </div>
+                  <BudgetResults result={result} />
+                </TabsContent>
+
+                <TabsContent value="vendors">
+                  <VendorClientTable 
+                    result={result}
+                    vendorAdjustments={vendorAdjustments}
+                    presupuestoTotal={result.totalPresupuesto}
+                  />
+                </TabsContent>
+
+                {userRole === "administrador" && (
+                  <TabsContent value="roles">
+                    <RoleManagement />
+                  </TabsContent>
+                )}
+              </Tabs>
             ) : (
               <Card className="flex h-[400px] items-center justify-center p-8 shadow-md">
                 <div className="text-center">
