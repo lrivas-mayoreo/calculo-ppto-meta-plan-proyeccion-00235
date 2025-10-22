@@ -392,9 +392,9 @@ const Index = () => {
 
           <div className="lg:col-span-2">
             {userRole === "administrador" ? (
-              <Tabs defaultValue={result ? "results" : "roles"} className="space-y-6">
+              <Tabs defaultValue="results" className="space-y-6">
                 <TabsList className="grid w-full grid-cols-3">
-                  <TabsTrigger value="results" disabled={!result}>Resultados</TabsTrigger>
+                  <TabsTrigger value="results">Resultados</TabsTrigger>
                   <TabsTrigger value="vendors" disabled={!result}>Vendedores-Clientes</TabsTrigger>
                   <TabsTrigger value="roles">
                     <Shield className="h-4 w-4 mr-2" />
@@ -471,7 +471,7 @@ const Index = () => {
                   <RoleManagement />
                 </TabsContent>
               </Tabs>
-            ) : result ? (
+            ) : (
               <Tabs defaultValue="results" className="space-y-6">
                 <TabsList className={`grid w-full ${(userRole === "gerente" || userRole === "admin_ventas") ? "grid-cols-2" : "grid-cols-1"}`}>
                   <TabsTrigger value="results">Resultados</TabsTrigger>
@@ -545,22 +545,6 @@ const Index = () => {
                   </TabsContent>
                 )}
               </Tabs>
-            ) : (
-            <Card className="flex h-[400px] items-center justify-center p-8 shadow-md">
-              <div className="text-center">
-                <div className="mb-4 flex justify-center">
-                  <div className="rounded-full bg-muted p-6">
-                    <Calculator className="h-12 w-12 text-muted-foreground" />
-                  </div>
-                </div>
-                <h3 className="mb-2 text-lg font-semibold text-foreground">
-                  Sin cálculos realizados
-                </h3>
-                <p className="text-sm text-muted-foreground">
-                  Complete el formulario para ver los resultados del análisis
-                </p>
-              </div>
-            </Card>
             )}
           </div>
         </div>
