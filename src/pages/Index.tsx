@@ -403,7 +403,7 @@ const Index = () => {
                 </TabsList>
 
                 <TabsContent value="results" className="space-y-6">
-                  {(userRole === "administrador" || userRole === "gerente") && vendedoresUnicos.length > 0 && (
+                  {result && (userRole === "administrador" || userRole === "gerente") && vendedoresUnicos.length > 0 && (
                     <Card className="p-4">
                       <VendorAdjustment 
                         vendedores={vendedoresUnicos}
@@ -413,6 +413,8 @@ const Index = () => {
                     </Card>
                   )}
                   
+                  {result && (
+                  <>
                   <div className="grid gap-4 md:grid-cols-4">
                     <MetricsCard
                       title="Presupuesto Total"
@@ -451,9 +453,11 @@ const Index = () => {
 
                   <BudgetResults result={result} />
                   <FormulaExplanation />
+                  </>
+                  )}
                 </TabsContent>
 
-                {(userRole === "administrador" || userRole === "admin_ventas") && (
+                {result && (userRole === "administrador" || userRole === "admin_ventas") && (
                   <TabsContent value="vendors">
                     <VendorClientTable 
                       result={result}
@@ -477,7 +481,7 @@ const Index = () => {
                 </TabsList>
 
                 <TabsContent value="results" className="space-y-6">
-                  {(userRole === "administrador" || userRole === "gerente") && vendedoresUnicos.length > 0 && (
+                  {result && (userRole === "administrador" || userRole === "gerente") && vendedoresUnicos.length > 0 && (
                     <Card className="p-4">
                       <VendorAdjustment 
                         vendedores={vendedoresUnicos}
@@ -487,6 +491,8 @@ const Index = () => {
                     </Card>
                   )}
                   
+                  {result && (
+                  <>
                   <div className="grid gap-4 md:grid-cols-4">
                     <MetricsCard
                       title="Presupuesto Total"
@@ -525,9 +531,11 @@ const Index = () => {
 
                   <BudgetResults result={result} />
                   <FormulaExplanation />
+                  </>
+                  )}
                 </TabsContent>
 
-                {(userRole === "gerente" || userRole === "admin_ventas") && (
+                {result && (userRole === "gerente" || userRole === "admin_ventas") && (
                   <TabsContent value="vendors">
                     <VendorClientTable 
                       result={result}
