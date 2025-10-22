@@ -354,9 +354,16 @@ const Index = () => {
               </div>
             </div>
             <div className="flex items-center gap-4">
-              <span className="text-sm text-muted-foreground">
-                {user.email}
-              </span>
+              <div className="flex flex-col items-end">
+                <span className="text-sm text-muted-foreground">
+                  {user.email}
+                </span>
+                {userRole && (
+                  <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
+                    {userRole === "admin_ventas" ? "Admin. Ventas" : userRole.charAt(0).toUpperCase() + userRole.slice(1)}
+                  </span>
+                )}
+              </div>
               <Button variant="outline" size="sm" onClick={handleSignOut}>
                 <LogOut className="h-4 w-4 mr-2" />
                 Cerrar Sesión
@@ -386,19 +393,21 @@ const Index = () => {
           <div className="lg:col-span-2">
             {result ? (
               <Tabs defaultValue="results" className="space-y-6">
-                <TabsList className="grid w-full grid-cols-3">
+                <TabsList className={`grid w-full ${userRole === "administrador" ? "grid-cols-3" : "grid-cols-2"}`}>
                   <TabsTrigger value="results">Resultados</TabsTrigger>
-                  <TabsTrigger value="vendors">Vendedores-Clientes</TabsTrigger>
+                  {(userRole === "administrador" || userRole === "admin_ventas") && (
+                    <TabsTrigger value="vendors">Vendedores-Clientes</TabsTrigger>
+                  )}
                   {userRole === "administrador" && (
                     <TabsTrigger value="roles">
                       <Shield className="h-4 w-4 mr-2" />
-                      Roles
+                      Gestión Usuarios
                     </TabsTrigger>
                   )}
                 </TabsList>
 
                 <TabsContent value="results" className="space-y-6">
-                  {vendedoresUnicos.length > 0 && (
+                  {(userRole === "administrador" || userRole === "gerente") && vendedoresUnicos.length > 0 && (
                     <Card className="p-4">
                       <VendorAdjustment 
                         vendedores={vendedoresUnicos}
@@ -445,15 +454,18 @@ const Index = () => {
                   </div>
 
                   <BudgetResults result={result} />
+                  <FormulaExplanation />
                 </TabsContent>
 
-                <TabsContent value="vendors">
-                  <VendorClientTable 
-                    result={result}
-                    vendorAdjustments={vendorAdjustments}
-                    presupuestoTotal={result.totalPresupuesto}
-                  />
-                </TabsContent>
+                {(userRole === "administrador" || userRole === "admin_ventas") && (
+                  <TabsContent value="vendors">
+                    <VendorClientTable 
+                      result={result}
+                      vendorAdjustments={vendorAdjustments}
+                      presupuestoTotal={result.totalPresupuesto}
+                    />
+                  </TabsContent>
+                )}
 
                 {userRole === "administrador" && (
                   <TabsContent value="roles">
@@ -480,8 +492,6 @@ const Index = () => {
             )}
           </div>
         </div>
-
-        <FormulaExplanation />
       </main>
     </div>
   );
