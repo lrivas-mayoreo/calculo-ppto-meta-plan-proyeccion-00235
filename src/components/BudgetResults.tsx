@@ -19,6 +19,8 @@ interface BudgetResultsProps {
 }
 
 export const BudgetResults = ({ result }: BudgetResultsProps) => {
+  if (!result) return null;
+  
   const [filtroVendedor, setFiltroVendedor] = useState("all");
   const [filtroCliente, setFiltroCliente] = useState("all");
   const [filtroMarca, setFiltroMarca] = useState("all");
