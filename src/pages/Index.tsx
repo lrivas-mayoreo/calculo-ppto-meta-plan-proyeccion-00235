@@ -391,19 +391,15 @@ const Index = () => {
           </div>
 
           <div className="lg:col-span-2">
-            {result ? (
-              <Tabs defaultValue="results" className="space-y-6">
-                <TabsList className={`grid w-full ${userRole === "administrador" ? "grid-cols-3" : "grid-cols-2"}`}>
-                  <TabsTrigger value="results">Resultados</TabsTrigger>
-                  {(userRole === "administrador" || userRole === "admin_ventas") && (
-                    <TabsTrigger value="vendors">Vendedores-Clientes</TabsTrigger>
-                  )}
-                  {userRole === "administrador" && (
-                    <TabsTrigger value="roles">
-                      <Shield className="h-4 w-4 mr-2" />
-                      Gestión Usuarios
-                    </TabsTrigger>
-                  )}
+            {userRole === "administrador" ? (
+              <Tabs defaultValue={result ? "results" : "roles"} className="space-y-6">
+                <TabsList className="grid w-full grid-cols-3">
+                  <TabsTrigger value="results" disabled={!result}>Resultados</TabsTrigger>
+                  <TabsTrigger value="vendors" disabled={!result}>Vendedores-Clientes</TabsTrigger>
+                  <TabsTrigger value="roles">
+                    <Shield className="h-4 w-4 mr-2" />
+                    Gestión Usuarios
+                  </TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="results" className="space-y-6">
@@ -467,28 +463,96 @@ const Index = () => {
                   </TabsContent>
                 )}
 
-                {userRole === "administrador" && (
-                  <TabsContent value="roles">
-                    <RoleManagement />
+                <TabsContent value="roles">
+                  <RoleManagement />
+                </TabsContent>
+              </Tabs>
+            ) : result ? (
+              <Tabs defaultValue="results" className="space-y-6">
+                <TabsList className={`grid w-full ${(userRole === "gerente" || userRole === "admin_ventas") ? "grid-cols-2" : "grid-cols-1"}`}>
+                  <TabsTrigger value="results">Resultados</TabsTrigger>
+                  {(userRole === "gerente" || userRole === "admin_ventas") && (
+                    <TabsTrigger value="vendors">Vendedores-Clientes</TabsTrigger>
+                  )}
+                </TabsList>
+
+                <TabsContent value="results" className="space-y-6">
+                  {(userRole === "administrador" || userRole === "gerente") && vendedoresUnicos.length > 0 && (
+                    <Card className="p-4">
+                      <VendorAdjustment 
+                        vendedores={vendedoresUnicos}
+                        presupuestoTotal={result.totalPresupuesto}
+                        onAdjust={setVendorAdjustments}
+                      />
+                    </Card>
+                  )}
+                  
+                  <div className="grid gap-4 md:grid-cols-4">
+                    <MetricsCard
+                      title="Presupuesto Total"
+                      value={`$${result.totalPresupuesto.toLocaleString("es-ES", {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })}`}
+                      icon={TrendingUp}
+                      trend="neutral"
+                    />
+                    <MetricsCard
+                      title="Marcas Calculadas"
+                      value={result.resultadosMarcas.length.toString()}
+                      icon={Calculator}
+                      trend="positive"
+                      subtitle="Con presupuesto"
+                    />
+                    <MetricsCard
+                      title="Promedio General"
+                      value={`$${result.promedioVentaReferencia.toLocaleString("es-ES", {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}`}
+                      icon={Calendar}
+                      trend="neutral"
+                      subtitle="Meses referencia"
+                    />
+                    <MetricsCard
+                      title="Errores"
+                      value={result.errores.length.toString()}
+                      icon={Users}
+                      trend={result.errores.length > 0 ? "negative" : "positive"}
+                      subtitle="Marcas con error"
+                    />
+                  </div>
+
+                  <BudgetResults result={result} />
+                  <FormulaExplanation />
+                </TabsContent>
+
+                {(userRole === "gerente" || userRole === "admin_ventas") && (
+                  <TabsContent value="vendors">
+                    <VendorClientTable 
+                      result={result}
+                      vendorAdjustments={vendorAdjustments}
+                      presupuestoTotal={result.totalPresupuesto}
+                    />
                   </TabsContent>
                 )}
               </Tabs>
             ) : (
-              <Card className="flex h-[400px] items-center justify-center p-8 shadow-md">
-                <div className="text-center">
-                  <div className="mb-4 flex justify-center">
-                    <div className="rounded-full bg-muted p-6">
-                      <Calculator className="h-12 w-12 text-muted-foreground" />
-                    </div>
+            <Card className="flex h-[400px] items-center justify-center p-8 shadow-md">
+              <div className="text-center">
+                <div className="mb-4 flex justify-center">
+                  <div className="rounded-full bg-muted p-6">
+                    <Calculator className="h-12 w-12 text-muted-foreground" />
                   </div>
-                  <h3 className="mb-2 text-lg font-semibold text-foreground">
-                    Sin cálculos realizados
-                  </h3>
-                  <p className="text-sm text-muted-foreground">
-                    Complete el formulario para ver los resultados del análisis
-                  </p>
                 </div>
-              </Card>
+                <h3 className="mb-2 text-lg font-semibold text-foreground">
+                  Sin cálculos realizados
+                </h3>
+                <p className="text-sm text-muted-foreground">
+                  Complete el formulario para ver los resultados del análisis
+                </p>
+              </div>
+            </Card>
             )}
           </div>
         </div>

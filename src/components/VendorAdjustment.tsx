@@ -33,54 +33,56 @@ interface VendorAdjustmentProps {
 
 export const VendorAdjustment = ({ vendedores, presupuestoTotal, onAdjust }: VendorAdjustmentProps) => {
   const [open, setOpen] = useState(false);
-  const [adjustmentType, setAdjustmentType] = useState<"percentage" | "currency">("percentage");
+  const [adjustmentType, setAdjustmentType] = useState<"percentage" | "currency">("currency");
   const [adjustments, setAdjustments] = useState<Record<string, number>>(
-    vendedores.reduce((acc, v) => ({ ...acc, [v]: adjustmentType === "percentage" ? 100 : presupuestoTotal / vendedores.length }), {})
+    vendedores.reduce((acc, v) => ({ ...acc, [v]: presupuestoTotal / vendedores.length }), {})
   );
-  const [lockedVendors, setLockedVendors] = useState<Set<string>>(new Set());
+  const [previousAdjustments, setPreviousAdjustments] = useState<Record<string, number>>(
+    vendedores.reduce((acc, v) => ({ ...acc, [v]: presupuestoTotal / vendedores.length }), {})
+  );
 
   const handleAdjustmentChange = (vendedor: string, value: string) => {
     const numValue = parseFloat(value) || 0;
-    
-    // Check if we can add another lock (n-1 limit)
-    if (!lockedVendors.has(vendedor) && lockedVendors.size >= vendedores.length - 1) {
-      toast.error(`Límite alcanzado: máximo ${vendedores.length - 1} ajustes permitidos`);
-      return;
-    }
+    const previousValue = previousAdjustments[vendedor] || 0;
+    const difference = numValue - previousValue;
 
-    const newAdjustments = { ...adjustments, [vendedor]: numValue };
-    const newLockedVendors = new Set(lockedVendors);
-    newLockedVendors.add(vendedor);
+    const newAdjustments = { ...adjustments };
+    newAdjustments[vendedor] = numValue;
 
-    // Find the unlocked vendor (the one that will receive the difference)
-    const unlockedVendor = vendedores.find(v => !newLockedVendors.has(v));
+    // Get other vendors (excluding the one being changed)
+    const otherVendors = vendedores.filter(v => v !== vendedor);
     
-    if (unlockedVendor) {
-      if (adjustmentType === "percentage") {
-        const totalLocked = Object.entries(newAdjustments)
-          .filter(([v]) => newLockedVendors.has(v))
-          .reduce((sum, [_, val]) => sum + val, 0);
-        const remaining = vendedores.length * 100 - totalLocked;
-        newAdjustments[unlockedVendor] = Math.max(0, remaining);
+    if (otherVendors.length > 0) {
+      // Calculate total of other vendors
+      const totalOthers = otherVendors.reduce((sum, v) => sum + adjustments[v], 0);
+      
+      if (totalOthers > 0) {
+        // Distribute the difference proportionally among other vendors
+        otherVendors.forEach(v => {
+          const proportion = adjustments[v] / totalOthers;
+          const adjustment = -difference * proportion;
+          newAdjustments[v] = Math.max(0, adjustments[v] + adjustment);
+        });
       } else {
-        const totalLocked = Object.entries(newAdjustments)
-          .filter(([v]) => newLockedVendors.has(v))
-          .reduce((sum, [_, val]) => sum + val, 0);
-        const remaining = presupuestoTotal - totalLocked;
-        newAdjustments[unlockedVendor] = Math.max(0, remaining);
+        // If total is 0, distribute equally
+        const equalShare = -difference / otherVendors.length;
+        otherVendors.forEach(v => {
+          newAdjustments[v] = Math.max(0, equalShare);
+        });
       }
     }
 
     setAdjustments(newAdjustments);
-    setLockedVendors(newLockedVendors);
+    setPreviousAdjustments(newAdjustments);
   };
 
   const handleTypeChange = (newType: "percentage" | "currency") => {
     setAdjustmentType(newType);
-    setLockedVendors(new Set());
     
     const baseValue = newType === "percentage" ? 100 : presupuestoTotal / vendedores.length;
-    setAdjustments(vendedores.reduce((acc, v) => ({ ...acc, [v]: baseValue }), {}));
+    const newAdjustments = vendedores.reduce((acc, v) => ({ ...acc, [v]: baseValue }), {});
+    setAdjustments(newAdjustments);
+    setPreviousAdjustments(newAdjustments);
   };
 
   const handleApply = () => {
@@ -140,7 +142,7 @@ export const VendorAdjustment = ({ vendedores, presupuestoTotal, onAdjust }: Ven
         <DialogHeader>
           <DialogTitle>Ajustar Distribución de Vendedores</DialogTitle>
           <DialogDescription>
-            Ajuste hasta {vendedores.length - 1} vendedores. El último se ajusta automáticamente.
+            Modifique el presupuesto de cualquier vendedor. El resto se distribuirá proporcionalmente entre los demás.
           </DialogDescription>
         </DialogHeader>
 
@@ -162,7 +164,7 @@ export const VendorAdjustment = ({ vendedores, presupuestoTotal, onAdjust }: Ven
             <AlertTriangle className="h-4 w-4" />
             <AlertDescription>
               {isValid
-                ? `Distribución válida - ${lockedVendors.size} de ${vendedores.length - 1} ajustes usados`
+                ? `Distribución válida - El presupuesto se ajusta automáticamente`
                 : adjustmentType === "percentage"
                 ? `Total: ${totalValue.toFixed(2)}% - Esperado: ${expectedTotal}%`
                 : `Total: $${totalValue.toLocaleString("es-ES", { minimumFractionDigits: 2 })} - Esperado: $${expectedTotal.toLocaleString("es-ES", { minimumFractionDigits: 2 })}`}
@@ -171,16 +173,10 @@ export const VendorAdjustment = ({ vendedores, presupuestoTotal, onAdjust }: Ven
 
           <div className="grid gap-4 py-4">
             {vendedores.map((vendedor) => {
-              const isLocked = lockedVendors.has(vendedor);
-              const isAutoCalculated = !isLocked && lockedVendors.size === vendedores.length - 1;
-              
               return (
                 <div key={vendedor} className="grid grid-cols-4 items-center gap-4">
                   <Label htmlFor={vendedor} className="col-span-2">
                     {vendedor}
-                    {isAutoCalculated && (
-                      <span className="ml-2 text-xs text-muted-foreground">(auto)</span>
-                    )}
                   </Label>
                   <Input
                     id={vendedor}
@@ -189,7 +185,6 @@ export const VendorAdjustment = ({ vendedores, presupuestoTotal, onAdjust }: Ven
                     value={adjustments[vendedor]?.toFixed(2) || 0}
                     onChange={(e) => handleAdjustmentChange(vendedor, e.target.value)}
                     className="col-span-2"
-                    disabled={isAutoCalculated}
                   />
                 </div>
               );
