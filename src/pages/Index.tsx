@@ -354,15 +354,26 @@ const Index = () => {
               </div>
             </div>
             <div className="flex items-center gap-4">
-              <div className="flex flex-col items-end">
-                <span className="text-sm text-muted-foreground">
-                  {user.email}
-                </span>
-                {userRole && (
-                  <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
-                    {userRole === "admin_ventas" ? "Admin. Ventas" : userRole.charAt(0).toUpperCase() + userRole.slice(1)}
+              <div className="flex items-center gap-3">
+                <div className="flex flex-col items-end">
+                  <span className="text-sm font-medium text-foreground">
+                    {user.email}
                   </span>
-                )}
+                  <div className="flex items-center gap-2 mt-1">
+                    {userRole ? (
+                      <span className="text-xs font-semibold text-primary bg-primary/10 px-3 py-1 rounded-full border border-primary/20">
+                        <Shield className="h-3 w-3 inline mr-1" />
+                        {userRole === "admin_ventas" ? "Admin. Ventas" : 
+                         userRole === "administrador" ? "Administrador" :
+                         userRole === "gerente" ? "Gerente" : userRole}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-muted-foreground bg-muted px-3 py-1 rounded-full">
+                        Sin rol asignado
+                      </span>
+                    )}
+                  </div>
+                </div>
               </div>
               <Button variant="outline" size="sm" onClick={handleSignOut}>
                 <LogOut className="h-4 w-4 mr-2" />
