@@ -11,6 +11,7 @@ import { RoleManagement } from "@/components/RoleManagement";
 import { FormulaExplanation } from "@/components/FormulaExplanation";
 import { Calculator, TrendingUp, Calendar, Users, LogOut, Shield } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import type { Session, User } from "@supabase/supabase-js";
@@ -121,6 +122,7 @@ const Index = () => {
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [userRole, setUserRole] = useState<string | null>(null);
+  const [simulatedRole, setSimulatedRole] = useState<string | null>(null);
   const [result, setResult] = useState<CalculationResult | null>(null);
   const [marcasPresupuesto, setMarcasPresupuesto] = useState<MarcaPresupuesto[]>([]);
   const [vendorAdjustments, setVendorAdjustments] = useState<Record<string, { value: number; type: "percentage" | "currency" }>>({});
@@ -140,7 +142,9 @@ const Index = () => {
           .eq("user_id", session.user.id)
           .maybeSingle();
         
-        setUserRole(roleData?.role || null);
+        const role = roleData?.role || null;
+        setUserRole(role);
+        setSimulatedRole(role);
       }
     });
 
@@ -158,7 +162,9 @@ const Index = () => {
           .eq("user_id", session.user.id)
           .maybeSingle();
         
-        setUserRole(roleData?.role || null);
+        const role = roleData?.role || null;
+        setUserRole(role);
+        setSimulatedRole(role);
       }
     });
 
@@ -327,6 +333,8 @@ const Index = () => {
     return null;
   }
 
+  const activeRole = simulatedRole || userRole;
+
   const vendedoresUnicos = Array.from(
     new Set(
       result?.resultadosMarcas.flatMap((m) =>
@@ -334,6 +342,17 @@ const Index = () => {
       ) || []
     )
   );
+
+  const availableRoles = [
+    { value: "administrador", label: "Administrador" },
+    { value: "gerente", label: "Gerente" },
+    { value: "admin_ventas", label: "Admin. Ventas" },
+  ];
+
+  const handleRoleChange = (newRole: string) => {
+    setSimulatedRole(newRole);
+    toast.info(`Vista cambiada a: ${availableRoles.find(r => r.value === newRole)?.label}`);
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -359,14 +378,28 @@ const Index = () => {
                   <span className="text-sm font-medium text-foreground">
                     {user.email}
                   </span>
-                  <div className="flex items-center gap-2 mt-1">
+                  <div className="flex items-center gap-3 mt-1">
                     {userRole ? (
-                      <span className="text-xs font-semibold text-primary bg-primary/10 px-3 py-1 rounded-full border border-primary/20">
-                        <Shield className="h-3 w-3 inline mr-1" />
-                        {userRole === "admin_ventas" ? "Admin. Ventas" : 
-                         userRole === "administrador" ? "Administrador" :
-                         userRole === "gerente" ? "Gerente" : userRole}
-                      </span>
+                      <>
+                        <span className="text-xs font-semibold text-primary bg-primary/10 px-3 py-1 rounded-full border border-primary/20">
+                          <Shield className="h-3 w-3 inline mr-1" />
+                          {userRole === "admin_ventas" ? "Admin. Ventas" : 
+                           userRole === "administrador" ? "Administrador" :
+                           userRole === "gerente" ? "Gerente" : userRole}
+                        </span>
+                        <Select value={activeRole || undefined} onValueChange={handleRoleChange}>
+                          <SelectTrigger className="h-7 w-[140px] text-xs">
+                            <SelectValue placeholder="Ver como..." />
+                          </SelectTrigger>
+                          <SelectContent className="bg-card z-50">
+                            {availableRoles.map((role) => (
+                              <SelectItem key={role.value} value={role.value}>
+                                {role.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </>
                     ) : (
                       <span className="text-xs text-muted-foreground bg-muted px-3 py-1 rounded-full">
                         Sin rol asignado
@@ -402,7 +435,7 @@ const Index = () => {
           </div>
 
           <div className="lg:col-span-2">
-            {userRole === "administrador" ? (
+            {activeRole === "administrador" ? (
               <Tabs defaultValue="results" className="space-y-6">
                 <TabsList className="grid w-full grid-cols-3">
                   <TabsTrigger value="results">Resultados</TabsTrigger>
@@ -414,7 +447,7 @@ const Index = () => {
                 </TabsList>
 
                 <TabsContent value="results" className="space-y-6">
-                  {result && (userRole === "administrador" || userRole === "gerente") && vendedoresUnicos.length > 0 && (
+                  {result && (activeRole === "administrador" || activeRole === "gerente") && vendedoresUnicos.length > 0 && (
                     <Card className="p-4">
                       <VendorAdjustment 
                         vendedores={vendedoresUnicos}
@@ -468,7 +501,7 @@ const Index = () => {
                   )}
                 </TabsContent>
 
-                {result && (userRole === "administrador" || userRole === "admin_ventas") && (
+                {result && (activeRole === "administrador" || activeRole === "admin_ventas") && (
                   <TabsContent value="vendors">
                     <VendorClientTable 
                       result={result}
@@ -484,15 +517,15 @@ const Index = () => {
               </Tabs>
             ) : (
               <Tabs defaultValue="results" className="space-y-6">
-                <TabsList className={`grid w-full ${(userRole === "gerente" || userRole === "admin_ventas") ? "grid-cols-2" : "grid-cols-1"}`}>
+                <TabsList className={`grid w-full ${(activeRole === "gerente" || activeRole === "admin_ventas") ? "grid-cols-2" : "grid-cols-1"}`}>
                   <TabsTrigger value="results">Resultados</TabsTrigger>
-                  {(userRole === "gerente" || userRole === "admin_ventas") && (
+                  {(activeRole === "gerente" || activeRole === "admin_ventas") && (
                     <TabsTrigger value="vendors">Vendedores-Clientes</TabsTrigger>
                   )}
                 </TabsList>
 
                 <TabsContent value="results" className="space-y-6">
-                  {result && (userRole === "administrador" || userRole === "gerente") && vendedoresUnicos.length > 0 && (
+                  {result && (activeRole === "administrador" || activeRole === "gerente") && vendedoresUnicos.length > 0 && (
                     <Card className="p-4">
                       <VendorAdjustment 
                         vendedores={vendedoresUnicos}
@@ -546,7 +579,7 @@ const Index = () => {
                   )}
                 </TabsContent>
 
-                {result && (userRole === "gerente" || userRole === "admin_ventas") && (
+                {result && (activeRole === "gerente" || activeRole === "admin_ventas") && (
                   <TabsContent value="vendors">
                     <VendorClientTable 
                       result={result}
