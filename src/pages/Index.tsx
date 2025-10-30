@@ -449,7 +449,7 @@ const Index = () => {
             {activeRole === "administrador" ? (
               <Tabs defaultValue="results" className="space-y-6">
                 <TabsList className="grid w-full grid-cols-3">
-                  <TabsTrigger value="results">Resultados</TabsTrigger>
+                  <TabsTrigger value="results">Parámetros</TabsTrigger>
                   <TabsTrigger value="vendors" disabled={!result}>Vendedores-Clientes</TabsTrigger>
                   <TabsTrigger value="roles">
                     <Shield className="h-4 w-4 mr-2" />
@@ -530,7 +530,7 @@ const Index = () => {
             ) : (
               <Tabs defaultValue="results" className="space-y-6">
                 <TabsList className={`grid w-full ${(activeRole === "gerente" || activeRole === "admin_ventas") ? "grid-cols-2" : "grid-cols-1"}`}>
-                  <TabsTrigger value="results">Resultados</TabsTrigger>
+                  <TabsTrigger value="results">Parámetros</TabsTrigger>
                   {(activeRole === "gerente" || activeRole === "admin_ventas") && (
                     <TabsTrigger value="vendors">Vendedores-Clientes</TabsTrigger>
                   )}
