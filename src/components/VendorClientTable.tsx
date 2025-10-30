@@ -19,6 +19,7 @@ interface VendorClientTableProps {
   result: CalculationResult;
   vendorAdjustments: Record<string, { value: number; type: "percentage" | "currency" }>;
   presupuestoTotal: number;
+  userRole: string | null;
 }
 
 interface VendorClientData {
@@ -29,11 +30,13 @@ interface VendorClientData {
   presupuestoAsignado: number;
   ventasReales: number;
   ajusteManual: number;
+  key: string;
 }
 
-export const VendorClientTable = ({ result, vendorAdjustments, presupuestoTotal }: VendorClientTableProps) => {
+export const VendorClientTable = ({ result, vendorAdjustments, presupuestoTotal, userRole }: VendorClientTableProps) => {
   const [vendorClientData, setVendorClientData] = useState<VendorClientData[]>([]);
   const [manualAdjustments, setManualAdjustments] = useState<Record<string, number>>({});
+  const [editingVendor, setEditingVendor] = useState<{ key: string; newVendor: string } | null>(null);
 
   useEffect(() => {
     calculateVendorClientData();
@@ -70,6 +73,7 @@ export const VendorClientTable = ({ result, vendorAdjustments, presupuestoTotal 
           presupuestoAsignado,
           ventasReales: cliente.subtotal,
           ajusteManual: manualAdjustments[key] || 0,
+          key,
         });
       });
     });
@@ -100,6 +104,29 @@ export const VendorClientTable = ({ result, vendorAdjustments, presupuestoTotal 
     toast.success("Ajustes aplicados exitosamente");
   };
 
+  const handleVendorChange = (key: string, newVendor: string) => {
+    setEditingVendor({ key, newVendor });
+  };
+
+  const applyVendorChange = () => {
+    if (!editingVendor) return;
+    
+    const updatedData = vendorClientData.map(item => {
+      if (item.key === editingVendor.key) {
+        return { ...item, vendedor: editingVendor.newVendor };
+      }
+      return item;
+    });
+    
+    setVendorClientData(updatedData);
+    setEditingVendor(null);
+    toast.success("Vendedor actualizado exitosamente");
+  };
+
+  const uniqueVendors = getUniqueVendors();
+  const canEdit = userRole === "admin_ventas" || userRole === "administrador";
+  const isReadOnly = userRole === "gerente";
+
   const vendorTotals = vendorClientData.reduce((acc, item) => {
     const current = acc[item.vendedor] || 0;
     acc[item.vendedor] = current + item.presupuestoAsignado + item.ajusteManual;
@@ -114,10 +141,22 @@ export const VendorClientTable = ({ result, vendorAdjustments, presupuestoTotal 
         <div className="flex items-center gap-2">
           <Users className="h-5 w-5 text-primary" />
           <h3 className="text-lg font-semibold">Vendedores y Clientes</h3>
+          {isReadOnly && (
+            <span className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded">Solo lectura</span>
+          )}
         </div>
-        <Button onClick={applyAdjustments} size="sm">
-          Aplicar Ajustes
-        </Button>
+        <div className="flex gap-2">
+          {editingVendor && canEdit && (
+            <Button onClick={applyVendorChange} size="sm" variant="default">
+              Confirmar Cambio
+            </Button>
+          )}
+          {!isReadOnly && (
+            <Button onClick={applyAdjustments} size="sm">
+              Aplicar Ajustes
+            </Button>
+          )}
+        </div>
       </div>
 
       <div className="overflow-x-auto rounded-md border">
@@ -141,7 +180,21 @@ export const VendorClientTable = ({ result, vendorAdjustments, presupuestoTotal 
 
               return (
                 <TableRow key={index}>
-                  <TableCell className="font-medium">{item.vendedor}</TableCell>
+                  <TableCell className="font-medium">
+                    {canEdit ? (
+                      <select
+                        value={editingVendor?.key === key ? editingVendor.newVendor : item.vendedor}
+                        onChange={(e) => handleVendorChange(key, e.target.value)}
+                        className="w-full rounded border border-input bg-background px-2 py-1 text-sm"
+                      >
+                        {uniqueVendors.map(v => (
+                          <option key={v} value={v}>{v}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      item.vendedor
+                    )}
+                  </TableCell>
                   <TableCell>{item.cliente}</TableCell>
                   <TableCell>{item.empresa}</TableCell>
                   <TableCell>{item.marca}</TableCell>
@@ -158,13 +211,20 @@ export const VendorClientTable = ({ result, vendorAdjustments, presupuestoTotal 
                     })}
                   </TableCell>
                   <TableCell className="text-right">
-                    <Input
-                      type="number"
-                      step="0.01"
-                      value={manualAdjustments[key] || 0}
-                      onChange={(e) => handleManualAdjustment(key, e.target.value)}
-                      className="w-32 text-right"
-                    />
+                    {!isReadOnly ? (
+                      <Input
+                        type="number"
+                        step="0.01"
+                        value={manualAdjustments[key] || 0}
+                        onChange={(e) => handleManualAdjustment(key, e.target.value)}
+                        className="w-32 text-right"
+                      />
+                    ) : (
+                      <span>${(manualAdjustments[key] || 0).toLocaleString("es-ES", {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}</span>
+                    )}
                   </TableCell>
                   <TableCell className="text-right font-semibold">
                     ${total.toLocaleString("es-ES", {

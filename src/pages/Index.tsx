@@ -9,6 +9,7 @@ import { VendorAdjustment } from "@/components/VendorAdjustment";
 import { VendorClientTable } from "@/components/VendorClientTable";
 import { RoleManagement } from "@/components/RoleManagement";
 import { FormulaExplanation } from "@/components/FormulaExplanation";
+import { SuggestedBudget } from "@/components/SuggestedBudget";
 import { Calculator, TrendingUp, Calendar, Users, LogOut, Shield } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -126,6 +127,7 @@ const Index = () => {
   const [result, setResult] = useState<CalculationResult | null>(null);
   const [marcasPresupuesto, setMarcasPresupuesto] = useState<MarcaPresupuesto[]>([]);
   const [vendorAdjustments, setVendorAdjustments] = useState<Record<string, { value: number; type: "percentage" | "currency" }>>({});
+  const [allHistoricalBudgets, setAllHistoricalBudgets] = useState<Array<{ marca: string; empresa: string; presupuesto: number }>>([]);
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
@@ -301,6 +303,14 @@ const Index = () => {
       totalPromedioReferenciaGeneral += promedioVentaMarca;
     });
 
+    // Store historical budget data for suggestions
+    const historicalBudgets = marcasPresupuesto.map(mp => ({
+      marca: mp.marca,
+      empresa: mp.empresa,
+      presupuesto: mp.presupuesto
+    }));
+    setAllHistoricalBudgets(prev => [...prev, ...historicalBudgets]);
+
     const resultadoFinal: CalculationResult = {
       totalPresupuesto: totalPresupuestoGeneral,
       promedioVentaReferencia: totalPromedioReferenciaGeneral / Math.max(resultadosMarcas.length, 1),
@@ -421,16 +431,17 @@ const Index = () => {
         <div className="grid gap-6 lg:grid-cols-3">
           <div className="lg:col-span-1">
             <Card className="p-6 shadow-md">
-          <BudgetForm
-            onCalculate={handleCalculate}
-            mockData={{
-              marcas: MOCK_DATA.marcas,
-              empresas: MOCK_DATA.empresas,
-              articulos: MOCK_DATA.articulos,
-            }}
-            mesesDisponibles={mesesDisponibles}
-            onMarcasPresupuestoLoad={setMarcasPresupuesto}
-          />
+              <BudgetForm
+                onCalculate={handleCalculate}
+                mockData={{
+                  marcas: MOCK_DATA.marcas,
+                  empresas: MOCK_DATA.empresas,
+                  articulos: MOCK_DATA.articulos,
+                }}
+                mesesDisponibles={mesesDisponibles}
+                onMarcasPresupuestoLoad={setMarcasPresupuesto}
+                historicalBudgets={allHistoricalBudgets}
+              />
             </Card>
           </div>
 
@@ -447,7 +458,7 @@ const Index = () => {
                 </TabsList>
 
                 <TabsContent value="results" className="space-y-6">
-                  {result && (activeRole === "administrador" || activeRole === "gerente") && vendedoresUnicos.length > 0 && (
+                  {result && activeRole === "administrador" && vendedoresUnicos.length > 0 && (
                     <Card className="p-4">
                       <VendorAdjustment 
                         vendedores={vendedoresUnicos}
@@ -507,6 +518,7 @@ const Index = () => {
                       result={result}
                       vendorAdjustments={vendorAdjustments}
                       presupuestoTotal={result.totalPresupuesto}
+                      userRole={activeRole}
                     />
                   </TabsContent>
                 )}
@@ -525,7 +537,7 @@ const Index = () => {
                 </TabsList>
 
                 <TabsContent value="results" className="space-y-6">
-                  {result && (activeRole === "administrador" || activeRole === "gerente") && vendedoresUnicos.length > 0 && (
+                  {result && (activeRole === "administrador" || activeRole === "gerente" || activeRole === "admin_ventas") && vendedoresUnicos.length > 0 && (
                     <Card className="p-4">
                       <VendorAdjustment 
                         vendedores={vendedoresUnicos}
@@ -585,6 +597,7 @@ const Index = () => {
                       result={result}
                       vendorAdjustments={vendorAdjustments}
                       presupuestoTotal={result.totalPresupuesto}
+                      userRole={activeRole}
                     />
                   </TabsContent>
                 )}

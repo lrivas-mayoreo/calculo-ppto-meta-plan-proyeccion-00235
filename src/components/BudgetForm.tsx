@@ -11,6 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible";
 import { Badge } from "@/components/ui/badge";
 import { parseDateFromExcel, formatDateToYYYYMMDD, detectDateFormat } from "@/lib/dateUtils";
+import { SuggestedBudget } from "@/components/SuggestedBudget";
 
 interface BudgetFormProps {
   onCalculate: (
@@ -24,9 +25,10 @@ interface BudgetFormProps {
   };
   mesesDisponibles: string[];
   onMarcasPresupuestoLoad: (marcas: MarcaPresupuesto[]) => void;
+  historicalBudgets?: Array<{ marca: string; empresa: string; presupuesto: number }>;
 }
 
-export const BudgetForm = ({ onCalculate, mockData, mesesDisponibles, onMarcasPresupuestoLoad }: BudgetFormProps) => {
+export const BudgetForm = ({ onCalculate, mockData, mesesDisponibles, onMarcasPresupuestoLoad, historicalBudgets = [] }: BudgetFormProps) => {
   const [mesesReferencia, setMesesReferencia] = useState<string[]>([]);
   const [marcasPresupuesto, setMarcasPresupuesto] = useState<MarcaPresupuesto[]>([]);
   const [marcasConError, setMarcasConError] = useState<Array<{ marca: string; fechaDestino: string; empresa: string; presupuesto: number; error: string }>>([]);
@@ -261,15 +263,26 @@ export const BudgetForm = ({ onCalculate, mockData, mesesDisponibles, onMarcasPr
       <div className="space-y-2">
         <div className="flex items-center justify-between">
           <Label htmlFor="excel-upload">Cargar Excel con Marcas y Presupuestos *</Label>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={handleDownloadTemplate}
-          >
-            <Download className="mr-2 h-4 w-4" />
-            Descargar Template
-          </Button>
+          <div className="flex gap-2">
+            <SuggestedBudget
+              historicalData={historicalBudgets}
+              marcasDisponibles={mockData.marcas}
+              empresasDisponibles={mockData.empresas}
+              onApplySuggestion={(marcas) => {
+                setMarcasPresupuesto(marcas);
+                onMarcasPresupuestoLoad(marcas);
+              }}
+            />
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleDownloadTemplate}
+            >
+              <Download className="mr-2 h-4 w-4" />
+              Descargar Template
+            </Button>
+          </div>
         </div>
         {excelFileName ? (
           <div className="space-y-2">
