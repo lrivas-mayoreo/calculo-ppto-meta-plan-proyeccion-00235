@@ -34,46 +34,44 @@ interface VendorAdjustmentProps {
 export const VendorAdjustment = ({ vendedores, presupuestoTotal, onAdjust }: VendorAdjustmentProps) => {
   const [open, setOpen] = useState(false);
   const [adjustmentType, setAdjustmentType] = useState<"percentage" | "currency">("currency");
+  const initialValue = adjustmentType === "percentage" ? 100 : presupuestoTotal / vendedores.length;
   const [adjustments, setAdjustments] = useState<Record<string, number>>(
-    vendedores.reduce((acc, v) => ({ ...acc, [v]: presupuestoTotal / vendedores.length }), {})
+    vendedores.reduce((acc, v) => ({ ...acc, [v]: initialValue }), {})
   );
-  const [previousAdjustments, setPreviousAdjustments] = useState<Record<string, number>>(
-    vendedores.reduce((acc, v) => ({ ...acc, [v]: presupuestoTotal / vendedores.length }), {})
-  );
+  const [fixedVendors, setFixedVendors] = useState<Set<string>>(new Set());
 
   const handleAdjustmentChange = (vendedor: string, value: string) => {
     const numValue = parseFloat(value) || 0;
-    const previousValue = previousAdjustments[vendedor] || 0;
-    const difference = numValue - previousValue;
+    
+    // Mark this vendor as fixed (manually adjusted)
+    const newFixedVendors = new Set(fixedVendors);
+    newFixedVendors.add(vendedor);
+    setFixedVendors(newFixedVendors);
 
     const newAdjustments = { ...adjustments };
     newAdjustments[vendedor] = numValue;
 
-    // Get other vendors (excluding the one being changed)
-    const otherVendors = vendedores.filter(v => v !== vendedor);
+    // Get unfixed vendors (excluding fixed ones)
+    const unfixedVendors = vendedores.filter(v => !newFixedVendors.has(v));
     
-    if (otherVendors.length > 0) {
-      // Calculate total of other vendors
-      const totalOthers = otherVendors.reduce((sum, v) => sum + adjustments[v], 0);
+    if (unfixedVendors.length > 0) {
+      // Calculate total expected and total fixed
+      const expectedTotal = adjustmentType === "percentage" ? 100 : presupuestoTotal;
+      const totalFixed = vendedores
+        .filter(v => newFixedVendors.has(v))
+        .reduce((sum, v) => sum + newAdjustments[v], 0);
       
-      if (totalOthers > 0) {
-        // Distribute the difference proportionally among other vendors
-        otherVendors.forEach(v => {
-          const proportion = adjustments[v] / totalOthers;
-          const adjustment = -difference * proportion;
-          newAdjustments[v] = Math.max(0, adjustments[v] + adjustment);
-        });
-      } else {
-        // If total is 0, distribute equally
-        const equalShare = -difference / otherVendors.length;
-        otherVendors.forEach(v => {
-          newAdjustments[v] = Math.max(0, equalShare);
-        });
-      }
+      const remainingTotal = expectedTotal - totalFixed;
+      
+      // Distribute remaining total equally among unfixed vendors
+      const valuePerUnfixed = remainingTotal / unfixedVendors.length;
+      
+      unfixedVendors.forEach(v => {
+        newAdjustments[v] = Math.max(0, valuePerUnfixed);
+      });
     }
 
     setAdjustments(newAdjustments);
-    setPreviousAdjustments(newAdjustments);
   };
 
   const handleTypeChange = (newType: "percentage" | "currency") => {
@@ -82,20 +80,20 @@ export const VendorAdjustment = ({ vendedores, presupuestoTotal, onAdjust }: Ven
     const baseValue = newType === "percentage" ? 100 : presupuestoTotal / vendedores.length;
     const newAdjustments = vendedores.reduce((acc, v) => ({ ...acc, [v]: baseValue }), {});
     setAdjustments(newAdjustments);
-    setPreviousAdjustments(newAdjustments);
+    setFixedVendors(new Set());
   };
 
   const handleApply = () => {
     const total = Object.values(adjustments).reduce((sum, val) => sum + val, 0);
     const expectedTotal = adjustmentType === "percentage" 
-      ? vendedores.length * 100 
+      ? 100 
       : presupuestoTotal;
     
     if (Math.abs(total - expectedTotal) > 0.01) {
       toast.error(
         adjustmentType === "percentage"
-          ? "La suma de los porcentajes debe ser igual al 100% por vendedor"
-          : "La suma de los montos debe ser igual al presupuesto total"
+          ? `Error: La suma debe ser exactamente 100%. Actual: ${total.toFixed(2)}%`
+          : `Error: La suma debe ser exactamente $${expectedTotal.toLocaleString("es-ES", { minimumFractionDigits: 2 })}. Actual: $${total.toLocaleString("es-ES", { minimumFractionDigits: 2 })}`
       );
       return;
     }
@@ -127,7 +125,7 @@ export const VendorAdjustment = ({ vendedores, presupuestoTotal, onAdjust }: Ven
   };
 
   const totalValue = Object.values(adjustments).reduce((sum, val) => sum + val, 0);
-  const expectedTotal = adjustmentType === "percentage" ? vendedores.length * 100 : presupuestoTotal;
+  const expectedTotal = adjustmentType === "percentage" ? 100 : presupuestoTotal;
   const isValid = Math.abs(totalValue - expectedTotal) < 0.01;
 
   return (
@@ -142,7 +140,7 @@ export const VendorAdjustment = ({ vendedores, presupuestoTotal, onAdjust }: Ven
         <DialogHeader>
           <DialogTitle>Ajustar Distribución de Vendedores</DialogTitle>
           <DialogDescription>
-            Modifique el presupuesto de cualquier vendedor. El resto se distribuirá proporcionalmente entre los demás.
+            Modifique el presupuesto de cualquier vendedor. Los valores ajustados quedan fijos y el resto se distribuye entre los no ajustados. El total siempre debe sumar 100% o el presupuesto total.
           </DialogDescription>
         </DialogHeader>
 
@@ -173,10 +171,12 @@ export const VendorAdjustment = ({ vendedores, presupuestoTotal, onAdjust }: Ven
 
           <div className="grid gap-4 py-4">
             {vendedores.map((vendedor) => {
+              const isFixed = fixedVendors.has(vendedor);
               return (
                 <div key={vendedor} className="grid grid-cols-4 items-center gap-4">
                   <Label htmlFor={vendedor} className="col-span-2">
                     {vendedor}
+                    {isFixed && <span className="ml-2 text-xs text-primary">(Fijo)</span>}
                   </Label>
                   <Input
                     id={vendedor}
@@ -184,7 +184,7 @@ export const VendorAdjustment = ({ vendedores, presupuestoTotal, onAdjust }: Ven
                     step="0.01"
                     value={adjustments[vendedor]?.toFixed(2) || 0}
                     onChange={(e) => handleAdjustmentChange(vendedor, e.target.value)}
-                    className="col-span-2"
+                    className={`col-span-2 ${isFixed ? "border-primary" : ""}`}
                   />
                 </div>
               );
