@@ -35,10 +35,11 @@ export const SuggestedBudget = ({
   const [suggestedDistribution, setSuggestedDistribution] = useState<Array<{ marca: string; empresa: string; porcentaje: number; monto: number }>>([]);
   const [isOpen, setIsOpen] = useState(false);
 
-  // Convert date format from YYYY-MM-DD to month-year format (e.g., "diciembre-2024")
+  // Convert date format to month-year format (e.g., "diciembre-2024")
   const convertDateToMesAnio = (dateStr: string): string => {
-    // Split the date string to avoid timezone issues
-    const [year, month, day] = dateStr.split('-').map(Number);
+    // Handle both YYYY/MM/DD and YYYY-MM-DD formats
+    const cleanDate = dateStr.replace(/\//g, '-');
+    const [year, month, day] = cleanDate.split('-').map(Number);
     const date = new Date(year, month - 1, day);
     const mes = date.toLocaleString("es-ES", { month: "long" });
     const anio = date.getFullYear();
