@@ -48,12 +48,28 @@ export const SuggestedBudget = ({
 
   // Filter historical data by selected months
   const filteredHistoricalData = useMemo(() => {
+    console.log("=== DEBUG FILTRADO ===");
+    console.log("Meses seleccionados:", selectedMeses);
+    console.log("Total datos históricos:", historicalData.length);
+    
     if (selectedMeses.length === 0) return [];
     
-    return historicalData.filter(item => {
+    // Log sample of dates to see format
+    if (historicalData.length > 0) {
+      console.log("Muestra de fechas originales:", historicalData.slice(0, 3).map(d => d.fechaDestino));
+      console.log("Muestra de fechas convertidas:", historicalData.slice(0, 3).map(d => convertDateToMesAnio(d.fechaDestino)));
+    }
+    
+    const filtered = historicalData.filter(item => {
       const itemMesAnio = convertDateToMesAnio(item.fechaDestino);
-      return selectedMeses.includes(itemMesAnio) && item.presupuesto > 0;
+      const matches = selectedMeses.includes(itemMesAnio) && item.presupuesto > 0;
+      return matches;
     });
+    
+    console.log("Datos después del filtro:", filtered.length);
+    console.log("Empresas en datos filtrados:", [...new Set(filtered.map(d => d.empresa))]);
+    
+    return filtered;
   }, [historicalData, selectedMeses]);
 
   // Get available empresas based on filtered data
