@@ -38,7 +38,9 @@ export const SuggestedBudget = ({
 
   // Convert date format from YYYY-MM-DD to month-year format (e.g., "diciembre-2024")
   const convertDateToMesAnio = (dateStr: string): string => {
-    const date = new Date(dateStr);
+    // Split the date string to avoid timezone issues
+    const [year, month, day] = dateStr.split('-').map(Number);
+    const date = new Date(year, month - 1, day);
     const mes = date.toLocaleString("es-ES", { month: "long" });
     const anio = date.getFullYear();
     return `${mes}-${anio}`;
