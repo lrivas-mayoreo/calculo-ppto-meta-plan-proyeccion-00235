@@ -81,7 +81,9 @@ export const SuggestedBudget = ({ historicalData, marcasDisponibles, empresasDis
     }
 
     // Calculate percentage participation and suggested amounts
+    // Filter out brands with zero or no historical budget
     const distribution = Array.from(brandTotals.entries())
+      .filter(([_, total]) => total > 0)
       .map(([marca, total]) => {
         const porcentaje = (total / totalHistorical) * 100;
         const monto = (budget * porcentaje) / 100;
