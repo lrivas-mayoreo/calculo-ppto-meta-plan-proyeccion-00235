@@ -127,7 +127,7 @@ const Index = () => {
   const [result, setResult] = useState<CalculationResult | null>(null);
   const [marcasPresupuesto, setMarcasPresupuesto] = useState<MarcaPresupuesto[]>([]);
   const [vendorAdjustments, setVendorAdjustments] = useState<Record<string, { value: number; type: "percentage" | "currency" }>>({});
-  const [allHistoricalBudgets, setAllHistoricalBudgets] = useState<Array<{ marca: string; empresa: string; presupuesto: number }>>([]);
+  const [allHistoricalBudgets, setAllHistoricalBudgets] = useState<Array<{ marca: string; empresa: string; presupuesto: number; fechaDestino: string }>>([]);
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
@@ -307,7 +307,8 @@ const Index = () => {
     const historicalBudgets = marcasPresupuesto.map(mp => ({
       marca: mp.marca,
       empresa: mp.empresa,
-      presupuesto: mp.presupuesto
+      presupuesto: mp.presupuesto,
+      fechaDestino: mp.fechaDestino
     }));
     setAllHistoricalBudgets(prev => [...prev, ...historicalBudgets]);
 

@@ -25,7 +25,7 @@ interface BudgetFormProps {
   };
   mesesDisponibles: string[];
   onMarcasPresupuestoLoad: (marcas: MarcaPresupuesto[]) => void;
-  historicalBudgets?: Array<{ marca: string; empresa: string; presupuesto: number }>;
+  historicalBudgets?: Array<{ marca: string; empresa: string; presupuesto: number; fechaDestino: string }>;
 }
 
 export const BudgetForm = ({ onCalculate, mockData, mesesDisponibles, onMarcasPresupuestoLoad, historicalBudgets = [] }: BudgetFormProps) => {
@@ -268,6 +268,7 @@ export const BudgetForm = ({ onCalculate, mockData, mesesDisponibles, onMarcasPr
               historicalData={historicalBudgets}
               marcasDisponibles={mockData.marcas}
               empresasDisponibles={mockData.empresas}
+              mesesDisponibles={mesesDisponibles}
               onApplySuggestion={(marcas) => {
                 setMarcasPresupuesto(marcas);
                 onMarcasPresupuestoLoad(marcas);

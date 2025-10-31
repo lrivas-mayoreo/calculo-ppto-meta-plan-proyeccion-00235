@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
@@ -13,20 +14,73 @@ interface SuggestedBudgetProps {
     marca: string;
     empresa: string;
     presupuesto: number;
+    fechaDestino: string;
   }>;
   marcasDisponibles: string[];
   empresasDisponibles: string[];
+  mesesDisponibles: string[];
   onApplySuggestion: (marcas: Array<{ marca: string; fechaDestino: string; empresa: string; presupuesto: number }>) => void;
 }
 
-export const SuggestedBudget = ({ historicalData, marcasDisponibles, empresasDisponibles, onApplySuggestion }: SuggestedBudgetProps) => {
+export const SuggestedBudget = ({ 
+  historicalData, 
+  marcasDisponibles, 
+  empresasDisponibles, 
+  mesesDisponibles,
+  onApplySuggestion 
+}: SuggestedBudgetProps) => {
   const [totalBudget, setTotalBudget] = useState<string>("");
   const [targetDate, setTargetDate] = useState<string>("");
-  const [selectedEmpresa, setSelectedEmpresa] = useState<string>(empresasDisponibles[0] || "");
+  const [selectedMeses, setSelectedMeses] = useState<string[]>([]);
+  const [selectedEmpresa, setSelectedEmpresa] = useState<string>("");
   const [suggestedDistribution, setSuggestedDistribution] = useState<Array<{ marca: string; porcentaje: number; monto: number }>>([]);
   const [isOpen, setIsOpen] = useState(false);
 
+  // Convert date format from YYYY-MM-DD to month-year format (e.g., "diciembre-2024")
+  const convertDateToMesAnio = (dateStr: string): string => {
+    const date = new Date(dateStr);
+    const mes = date.toLocaleString("es-ES", { month: "long" });
+    const anio = date.getFullYear();
+    return `${mes}-${anio}`;
+  };
+
+  // Filter historical data by selected months
+  const filteredHistoricalData = useMemo(() => {
+    if (selectedMeses.length === 0) return [];
+    
+    return historicalData.filter(item => {
+      const itemMesAnio = convertDateToMesAnio(item.fechaDestino);
+      return selectedMeses.includes(itemMesAnio) && item.presupuesto > 0;
+    });
+  }, [historicalData, selectedMeses]);
+
+  // Get available empresas based on filtered data
+  const availableEmpresas = useMemo(() => {
+    const empresas = new Set(filteredHistoricalData.map(item => item.empresa));
+    return Array.from(empresas);
+  }, [filteredHistoricalData]);
+
+  // Update selected empresa when available empresas change
+  useMemo(() => {
+    if (availableEmpresas.length > 0 && !availableEmpresas.includes(selectedEmpresa)) {
+      setSelectedEmpresa(availableEmpresas[0]);
+    }
+  }, [availableEmpresas, selectedEmpresa]);
+
+  const handleMesToggle = (mes: string) => {
+    setSelectedMeses(prev => 
+      prev.includes(mes) ? prev.filter(m => m !== mes) : [...prev, mes]
+    );
+    // Reset distribution when months change
+    setSuggestedDistribution([]);
+  };
+
   const calculateSuggestion = () => {
+    if (selectedMeses.length === 0) {
+      toast.error("Seleccione al menos un mes de referencia");
+      return;
+    }
+
     if (!totalBudget || parseFloat(totalBudget) <= 0) {
       toast.error("Ingrese un monto de presupuesto válido");
       return;
@@ -37,29 +91,20 @@ export const SuggestedBudget = ({ historicalData, marcasDisponibles, empresasDis
       return;
     }
 
+    if (!selectedEmpresa) {
+      toast.error("No hay empresas disponibles con datos en los meses seleccionados");
+      return;
+    }
+
     const budget = parseFloat(totalBudget);
 
-    // Filter historical data by selected empresa and exclude zero/null budgets
-    const empresaData = historicalData.filter(d => 
-      d.empresa === selectedEmpresa && 
-      d.presupuesto != null && 
-      d.presupuesto > 0
-    );
-    
+    // Filter data by selected empresa and months (already filtered in filteredHistoricalData)
+    const empresaData = filteredHistoricalData.filter(d => d.empresa === selectedEmpresa);
+
     console.log("Datos filtrados para empresa:", selectedEmpresa, empresaData);
 
     if (empresaData.length === 0) {
-      toast.warning("No hay datos históricos para esta empresa. Se distribuirá equitativamente.");
-      
-      // Equal distribution if no historical data
-      const equalShare = budget / marcasDisponibles.length;
-      const distribution = marcasDisponibles.map(marca => ({
-        marca,
-        porcentaje: 100 / marcasDisponibles.length,
-        monto: equalShare
-      }));
-      
-      setSuggestedDistribution(distribution);
+      toast.error("No hay datos históricos para esta empresa en los meses seleccionados");
       return;
     }
 
@@ -72,26 +117,18 @@ export const SuggestedBudget = ({ historicalData, marcasDisponibles, empresasDis
 
     console.log("Totales por marca:", Object.fromEntries(brandTotals));
 
-    const totalHistorical = Array.from(brandTotals.values()).reduce((sum, val) => sum + val, 0);
+    // Filter out brands with zero total
+    const validBrands = Array.from(brandTotals.entries()).filter(([_, total]) => total > 0);
 
-    if (totalHistorical === 0) {
-      toast.warning("Los datos históricos no tienen presupuestos válidos. Se distribuirá equitativamente.");
-      
-      const equalShare = budget / marcasDisponibles.length;
-      const distribution = marcasDisponibles.map(marca => ({
-        marca,
-        porcentaje: 100 / marcasDisponibles.length,
-        monto: equalShare
-      }));
-      
-      setSuggestedDistribution(distribution);
+    if (validBrands.length === 0) {
+      toast.error("No hay marcas con presupuesto válido en los meses seleccionados");
       return;
     }
 
+    const totalHistorical = validBrands.reduce((sum, [_, total]) => sum + total, 0);
+
     // Calculate percentage participation and suggested amounts
-    // Filter out brands with zero or no historical budget
-    const distribution = Array.from(brandTotals.entries())
-      .filter(([_, total]) => total > 0)
+    const distribution = validBrands
       .map(([marca, total]) => {
         const porcentaje = (total / totalHistorical) * 100;
         const monto = (budget * porcentaje) / 100;
@@ -100,7 +137,7 @@ export const SuggestedBudget = ({ historicalData, marcasDisponibles, empresasDis
       .sort((a, b) => b.porcentaje - a.porcentaje);
 
     setSuggestedDistribution(distribution);
-    toast.success(`Presupuesto distribuido basado en ${empresaData.length} registros históricos`);
+    toast.success(`Presupuesto distribuido entre ${distribution.length} marcas basado en ${empresaData.length} registros históricos`);
   };
 
   const handleApply = () => {
@@ -147,6 +184,7 @@ export const SuggestedBudget = ({ historicalData, marcasDisponibles, empresasDis
   const resetForm = () => {
     setTotalBudget("");
     setTargetDate("");
+    setSelectedMeses([]);
     setSuggestedDistribution([]);
   };
 
@@ -158,59 +196,101 @@ export const SuggestedBudget = ({ historicalData, marcasDisponibles, empresasDis
           Presupuesto Sugerido
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Sparkles className="h-5 w-5 text-primary" />
             Presupuesto Sugerido por Marca
           </DialogTitle>
           <DialogDescription>
-            Ingrese el monto total y la distribución se calculará automáticamente basándose en el comportamiento histórico de cada marca
+            Seleccione los meses de referencia y la distribución se calculará automáticamente basándose en el comportamiento histórico
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="total-budget">Presupuesto Total *</Label>
-              <Input
-                id="total-budget"
-                type="number"
-                step="0.01"
-                placeholder="Ej: 1000000"
-                value={totalBudget}
-                onChange={(e) => setTotalBudget(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="target-date">Fecha Destino *</Label>
-              <Input
-                id="target-date"
-                type="date"
-                value={targetDate}
-                onChange={(e) => setTargetDate(e.target.value)}
-              />
-            </div>
-          </div>
-
+          {/* Months selection */}
           <div className="space-y-2">
-            <Label htmlFor="empresa">Empresa *</Label>
-            <select
-              id="empresa"
-              value={selectedEmpresa}
-              onChange={(e) => setSelectedEmpresa(e.target.value)}
-              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-            >
-              {empresasDisponibles.map(empresa => (
-                <option key={empresa} value={empresa}>{empresa}</option>
+            <Label className="text-base font-semibold">Meses de Referencia *</Label>
+            <div className="grid grid-cols-3 gap-2 max-h-48 overflow-y-auto border rounded-md p-3">
+              {mesesDisponibles.map((mes) => (
+                <div key={mes} className="flex items-center space-x-2">
+                  <Checkbox
+                    id={`mes-${mes}`}
+                    checked={selectedMeses.includes(mes)}
+                    onCheckedChange={() => handleMesToggle(mes)}
+                  />
+                  <Label
+                    htmlFor={`mes-${mes}`}
+                    className="text-sm font-normal cursor-pointer"
+                  >
+                    {mes}
+                  </Label>
+                </div>
               ))}
-            </select>
+            </div>
+            {selectedMeses.length > 0 && (
+              <p className="text-sm text-muted-foreground">
+                {selectedMeses.length} {selectedMeses.length === 1 ? 'mes seleccionado' : 'meses seleccionados'}
+              </p>
+            )}
           </div>
 
-          <Button onClick={calculateSuggestion} className="w-full">
-            <Sparkles className="mr-2 h-4 w-4" />
-            Calcular Distribución
-          </Button>
+          {/* Show empresa selector only if months are selected */}
+          {selectedMeses.length > 0 && (
+            <>
+              <div className="space-y-2">
+                <Label htmlFor="empresa">Empresa *</Label>
+                {availableEmpresas.length > 0 ? (
+                  <select
+                    id="empresa"
+                    value={selectedEmpresa}
+                    onChange={(e) => setSelectedEmpresa(e.target.value)}
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  >
+                    {availableEmpresas.map(empresa => (
+                      <option key={empresa} value={empresa}>{empresa}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <p className="text-sm text-muted-foreground bg-muted p-3 rounded-md">
+                    No hay empresas con datos históricos en los meses seleccionados
+                  </p>
+                )}
+              </div>
+
+              {availableEmpresas.length > 0 && (
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="total-budget">Presupuesto Total *</Label>
+                    <Input
+                      id="total-budget"
+                      type="number"
+                      step="0.01"
+                      placeholder="Ej: 1000000"
+                      value={totalBudget}
+                      onChange={(e) => setTotalBudget(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="target-date">Fecha Destino *</Label>
+                    <Input
+                      id="target-date"
+                      type="date"
+                      value={targetDate}
+                      onChange={(e) => setTargetDate(e.target.value)}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {availableEmpresas.length > 0 && (
+                <Button onClick={calculateSuggestion} className="w-full">
+                  <Sparkles className="mr-2 h-4 w-4" />
+                  Calcular Distribución
+                </Button>
+              )}
+            </>
+          )}
 
           {suggestedDistribution.length > 0 && (
             <div className="space-y-4">
