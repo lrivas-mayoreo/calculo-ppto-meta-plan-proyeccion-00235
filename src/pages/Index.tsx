@@ -484,24 +484,22 @@ const Index = () => {
       </header>
 
       <main className="container mx-auto px-4 py-8">
-        <div className="grid gap-6 lg:grid-cols-3">
-          <div className="lg:col-span-1">
-            <Card className="p-6 shadow-md">
-              <BudgetForm
-                onCalculate={handleCalculate}
-                mockData={{
-                  marcas: MOCK_DATA.marcas,
-                  empresas: MOCK_DATA.empresas,
-                  articulos: MOCK_DATA.articulos,
-                }}
-                mesesDisponibles={mesesDisponibles}
-                onMarcasPresupuestoLoad={setMarcasPresupuesto}
-                historicalBudgets={allHistoricalBudgets}
-              />
-            </Card>
-          </div>
+        <div className="space-y-6">
+          <Card className="p-6 shadow-md">
+            <BudgetForm
+              onCalculate={handleCalculate}
+              mockData={{
+                marcas: MOCK_DATA.marcas,
+                empresas: MOCK_DATA.empresas,
+                articulos: MOCK_DATA.articulos,
+              }}
+              mesesDisponibles={mesesDisponibles}
+              onMarcasPresupuestoLoad={setMarcasPresupuesto}
+              historicalBudgets={allHistoricalBudgets}
+            />
+          </Card>
 
-          <div className="lg:col-span-2">
+          <div>
             {activeRole === "administrador" ? (
               <Tabs defaultValue="results" className="space-y-6">
                 <TabsList className="grid w-full grid-cols-3">
