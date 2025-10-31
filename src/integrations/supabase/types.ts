@@ -53,6 +53,60 @@ export type Database = {
         }
         Relationships: []
       }
+      clientes: {
+        Row: {
+          codigo: string
+          created_at: string
+          id: string
+          nombre: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          codigo: string
+          created_at?: string
+          id?: string
+          nombre: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          codigo?: string
+          created_at?: string
+          id?: string
+          nombre?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      marcas: {
+        Row: {
+          codigo: string
+          created_at: string
+          id: string
+          nombre: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          codigo: string
+          created_at?: string
+          id?: string
+          nombre: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          codigo?: string
+          created_at?: string
+          id?: string
+          nombre?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           created_at: string
@@ -97,6 +151,91 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      vendedores: {
+        Row: {
+          codigo: string
+          created_at: string
+          id: string
+          nombre: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          codigo: string
+          created_at?: string
+          id?: string
+          nombre: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          codigo?: string
+          created_at?: string
+          id?: string
+          nombre?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      ventas_reales: {
+        Row: {
+          codigo_cliente: string
+          codigo_marca: string
+          codigo_vendedor: string | null
+          created_at: string
+          id: string
+          mes: string
+          monto: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          codigo_cliente: string
+          codigo_marca: string
+          codigo_vendedor?: string | null
+          created_at?: string
+          id?: string
+          mes: string
+          monto: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          codigo_cliente?: string
+          codigo_marca?: string
+          codigo_vendedor?: string | null
+          created_at?: string
+          id?: string
+          mes?: string
+          monto?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ventas_reales_user_id_codigo_cliente_fkey"
+            columns: ["user_id", "codigo_cliente"]
+            isOneToOne: false
+            referencedRelation: "clientes"
+            referencedColumns: ["user_id", "codigo"]
+          },
+          {
+            foreignKeyName: "ventas_reales_user_id_codigo_marca_fkey"
+            columns: ["user_id", "codigo_marca"]
+            isOneToOne: false
+            referencedRelation: "marcas"
+            referencedColumns: ["user_id", "codigo"]
+          },
+          {
+            foreignKeyName: "ventas_reales_user_id_codigo_vendedor_fkey"
+            columns: ["user_id", "codigo_vendedor"]
+            isOneToOne: false
+            referencedRelation: "vendedores"
+            referencedColumns: ["user_id", "codigo"]
+          },
+        ]
       }
     }
     Views: {
