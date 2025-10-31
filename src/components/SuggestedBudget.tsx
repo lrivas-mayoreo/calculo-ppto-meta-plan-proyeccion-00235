@@ -39,8 +39,14 @@ export const SuggestedBudget = ({ historicalData, marcasDisponibles, empresasDis
 
     const budget = parseFloat(totalBudget);
 
-    // Filter historical data by selected empresa
-    const empresaData = historicalData.filter(d => d.empresa === selectedEmpresa);
+    // Filter historical data by selected empresa and exclude zero/null budgets
+    const empresaData = historicalData.filter(d => 
+      d.empresa === selectedEmpresa && 
+      d.presupuesto != null && 
+      d.presupuesto > 0
+    );
+    
+    console.log("Datos filtrados para empresa:", selectedEmpresa, empresaData);
 
     if (empresaData.length === 0) {
       toast.warning("No hay datos históricos para esta empresa. Se distribuirá equitativamente.");
@@ -57,12 +63,14 @@ export const SuggestedBudget = ({ historicalData, marcasDisponibles, empresasDis
       return;
     }
 
-    // Calculate total historical budget per brand
+    // Calculate total historical budget per brand (only brands with positive budgets)
     const brandTotals = new Map<string, number>();
     empresaData.forEach(item => {
       const current = brandTotals.get(item.marca) || 0;
       brandTotals.set(item.marca, current + item.presupuesto);
     });
+
+    console.log("Totales por marca:", Object.fromEntries(brandTotals));
 
     const totalHistorical = Array.from(brandTotals.values()).reduce((sum, val) => sum + val, 0);
 
