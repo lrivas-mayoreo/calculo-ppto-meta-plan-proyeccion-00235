@@ -51,6 +51,7 @@ export const SuggestedBudget = ({
     console.log("=== DEBUG FILTRADO ===");
     console.log("Meses seleccionados:", selectedMeses);
     console.log("Total datos históricos:", historicalData.length);
+    console.log("Datos históricos completos:", historicalData);
     
     if (selectedMeses.length === 0) return [];
     

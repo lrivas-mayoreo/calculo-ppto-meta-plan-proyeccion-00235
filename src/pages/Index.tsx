@@ -335,7 +335,7 @@ const Index = () => {
       totalPromedioReferenciaGeneral += promedioVentaMarca;
     });
 
-    // Store historical budget data for suggestions
+    // Store historical budget data for suggestions in database
     const historicalBudgets = marcasPresupuesto.map(mp => ({
       marca: mp.marca,
       empresa: mp.empresa,
@@ -343,6 +343,29 @@ const Index = () => {
       fechaDestino: mp.fechaDestino
     }));
     setAllHistoricalBudgets(prev => [...prev, ...historicalBudgets]);
+
+    // Save budgets to database for future suggestions
+    if (user) {
+      const budgetsToInsert = marcasPresupuesto.map(mp => ({
+        user_id: user.id,
+        marca: mp.marca,
+        empresa: mp.empresa,
+        presupuesto: mp.presupuesto,
+        fecha_destino: mp.fechaDestino,
+        role: (userRole as "administrador" | "gerente" | "admin_ventas") || 'administrador'
+      }));
+
+      supabase
+        .from('budgets')
+        .insert(budgetsToInsert)
+        .then(({ error }) => {
+          if (error) {
+            console.error('Error saving budgets:', error);
+          } else {
+            console.log('Budgets saved successfully');
+          }
+        });
+    }
 
     const resultadoFinal: CalculationResult = {
       totalPresupuesto: totalPresupuestoGeneral,
