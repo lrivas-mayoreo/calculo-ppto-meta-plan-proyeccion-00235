@@ -10,6 +10,7 @@ import { VendorClientTable } from "@/components/VendorClientTable";
 import { RoleManagement } from "@/components/RoleManagement";
 import { FormulaExplanation } from "@/components/FormulaExplanation";
 import { SuggestedBudget } from "@/components/SuggestedBudget";
+import { DataImport } from "@/components/DataImport";
 import { Calculator, TrendingUp, Calendar, Users, LogOut, Shield } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -503,9 +504,10 @@ const Index = () => {
           <div>
             {activeRole === "administrador" ? (
               <Tabs defaultValue="results" className="space-y-6">
-                <TabsList className="grid w-full grid-cols-3">
+                <TabsList className="grid w-full grid-cols-4">
                   <TabsTrigger value="results">Parámetros</TabsTrigger>
                   <TabsTrigger value="vendors" disabled={!result}>Vendedores-Clientes</TabsTrigger>
+                  <TabsTrigger value="import">Importar Datos</TabsTrigger>
                   <TabsTrigger value="roles">
                     <Shield className="h-4 w-4 mr-2" />
                     Gestión Usuarios
@@ -577,6 +579,10 @@ const Index = () => {
                     />
                   </TabsContent>
                 )}
+
+                <TabsContent value="import">
+                  <DataImport />
+                </TabsContent>
 
                 <TabsContent value="roles">
                   <RoleManagement />
