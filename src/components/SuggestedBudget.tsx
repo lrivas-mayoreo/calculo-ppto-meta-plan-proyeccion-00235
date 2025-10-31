@@ -32,8 +32,7 @@ export const SuggestedBudget = ({
   const [totalBudget, setTotalBudget] = useState<string>("");
   const [targetDate, setTargetDate] = useState<string>("");
   const [selectedMeses, setSelectedMeses] = useState<string[]>([]);
-  const [selectedEmpresa, setSelectedEmpresa] = useState<string>("");
-  const [suggestedDistribution, setSuggestedDistribution] = useState<Array<{ marca: string; porcentaje: number; monto: number }>>([]);
+  const [suggestedDistribution, setSuggestedDistribution] = useState<Array<{ marca: string; empresa: string; porcentaje: number; monto: number }>>([]);
   const [isOpen, setIsOpen] = useState(false);
 
   // Convert date format from YYYY-MM-DD to month-year format (e.g., "diciembre-2024")
@@ -72,18 +71,6 @@ export const SuggestedBudget = ({
     return filtered;
   }, [historicalData, selectedMeses]);
 
-  // Get available empresas based on filtered data
-  const availableEmpresas = useMemo(() => {
-    const empresas = new Set(filteredHistoricalData.map(item => item.empresa));
-    return Array.from(empresas);
-  }, [filteredHistoricalData]);
-
-  // Update selected empresa when available empresas change
-  useMemo(() => {
-    if (availableEmpresas.length > 0 && !availableEmpresas.includes(selectedEmpresa)) {
-      setSelectedEmpresa(availableEmpresas[0]);
-    }
-  }, [availableEmpresas, selectedEmpresa]);
 
   const handleMesToggle = (mes: string) => {
     setSelectedMeses(prev => 
@@ -109,53 +96,55 @@ export const SuggestedBudget = ({
       return;
     }
 
-    if (!selectedEmpresa) {
-      toast.error("No hay empresas disponibles con datos en los meses seleccionados");
+    if (filteredHistoricalData.length === 0) {
+      toast.error("No hay datos históricos en los meses seleccionados");
       return;
     }
 
     const budget = parseFloat(totalBudget);
 
-    // Filter data by selected empresa and months (already filtered in filteredHistoricalData)
-    const empresaData = filteredHistoricalData.filter(d => d.empresa === selectedEmpresa);
+    console.log("Datos filtrados totales:", filteredHistoricalData.length);
 
-    console.log("Datos filtrados para empresa:", selectedEmpresa, empresaData);
-
-    if (empresaData.length === 0) {
-      toast.error("No hay datos históricos para esta empresa en los meses seleccionados");
-      return;
-    }
-
-    // Calculate total historical budget per brand (only brands with positive budgets)
-    const brandTotals = new Map<string, number>();
-    empresaData.forEach(item => {
-      const current = brandTotals.get(item.marca) || 0;
-      brandTotals.set(item.marca, current + item.presupuesto);
+    // Calculate total historical budget per brand + empresa combination
+    const brandEmpresaTotals = new Map<string, { empresa: string; total: number }>();
+    filteredHistoricalData.forEach(item => {
+      const key = `${item.marca}|${item.empresa}`;
+      const current = brandEmpresaTotals.get(key);
+      if (current) {
+        current.total += item.presupuesto;
+      } else {
+        brandEmpresaTotals.set(key, { empresa: item.empresa, total: item.presupuesto });
+      }
     });
 
-    console.log("Totales por marca:", Object.fromEntries(brandTotals));
+    console.log("Totales por marca+empresa:", Object.fromEntries(brandEmpresaTotals));
 
     // Filter out brands with zero total
-    const validBrands = Array.from(brandTotals.entries()).filter(([_, total]) => total > 0);
+    const validBrands = Array.from(brandEmpresaTotals.entries())
+      .filter(([_, data]) => data.total > 0)
+      .map(([key, data]) => {
+        const [marca] = key.split('|');
+        return { marca, empresa: data.empresa, total: data.total };
+      });
 
     if (validBrands.length === 0) {
       toast.error("No hay marcas con presupuesto válido en los meses seleccionados");
       return;
     }
 
-    const totalHistorical = validBrands.reduce((sum, [_, total]) => sum + total, 0);
+    const totalHistorical = validBrands.reduce((sum, item) => sum + item.total, 0);
 
     // Calculate percentage participation and suggested amounts
     const distribution = validBrands
-      .map(([marca, total]) => {
-        const porcentaje = (total / totalHistorical) * 100;
+      .map(item => {
+        const porcentaje = (item.total / totalHistorical) * 100;
         const monto = (budget * porcentaje) / 100;
-        return { marca, porcentaje, monto };
+        return { marca: item.marca, empresa: item.empresa, porcentaje, monto };
       })
       .sort((a, b) => b.porcentaje - a.porcentaje);
 
     setSuggestedDistribution(distribution);
-    toast.success(`Presupuesto distribuido entre ${distribution.length} marcas basado en ${empresaData.length} registros históricos`);
+    toast.success(`Presupuesto distribuido entre ${distribution.length} marcas basado en ${filteredHistoricalData.length} registros históricos`);
   };
 
   const handleApply = () => {
@@ -167,7 +156,7 @@ export const SuggestedBudget = ({
     const marcasPresupuesto = suggestedDistribution.map(item => ({
       marca: item.marca,
       fechaDestino: targetDate,
-      empresa: selectedEmpresa,
+      empresa: item.empresa,
       presupuesto: item.monto
     }));
 
@@ -185,8 +174,8 @@ export const SuggestedBudget = ({
 
     const excelData = suggestedDistribution.map(item => ({
       Marca: item.marca,
+      Empresa: item.empresa,
       Fecha: targetDate,
-      Empresa: selectedEmpresa,
       Presupuesto: item.monto,
       Porcentaje: `${item.porcentaje.toFixed(2)}%`
     }));
@@ -253,61 +242,43 @@ export const SuggestedBudget = ({
             )}
           </div>
 
-          {/* Show empresa selector only if months are selected */}
-          {selectedMeses.length > 0 && (
+          {/* Show inputs only if months are selected */}
+          {selectedMeses.length > 0 && filteredHistoricalData.length > 0 && (
             <>
-              <div className="space-y-2">
-                <Label htmlFor="empresa">Empresa *</Label>
-                {availableEmpresas.length > 0 ? (
-                  <select
-                    id="empresa"
-                    value={selectedEmpresa}
-                    onChange={(e) => setSelectedEmpresa(e.target.value)}
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                  >
-                    {availableEmpresas.map(empresa => (
-                      <option key={empresa} value={empresa}>{empresa}</option>
-                    ))}
-                  </select>
-                ) : (
-                  <p className="text-sm text-muted-foreground bg-muted p-3 rounded-md">
-                    No hay empresas con datos históricos en los meses seleccionados
-                  </p>
-                )}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="total-budget">Presupuesto Total *</Label>
+                  <Input
+                    id="total-budget"
+                    type="number"
+                    step="0.01"
+                    placeholder="Ej: 1000000"
+                    value={totalBudget}
+                    onChange={(e) => setTotalBudget(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="target-date">Fecha Destino *</Label>
+                  <Input
+                    id="target-date"
+                    type="date"
+                    value={targetDate}
+                    onChange={(e) => setTargetDate(e.target.value)}
+                  />
+                </div>
               </div>
 
-              {availableEmpresas.length > 0 && (
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="total-budget">Presupuesto Total *</Label>
-                    <Input
-                      id="total-budget"
-                      type="number"
-                      step="0.01"
-                      placeholder="Ej: 1000000"
-                      value={totalBudget}
-                      onChange={(e) => setTotalBudget(e.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="target-date">Fecha Destino *</Label>
-                    <Input
-                      id="target-date"
-                      type="date"
-                      value={targetDate}
-                      onChange={(e) => setTargetDate(e.target.value)}
-                    />
-                  </div>
-                </div>
-              )}
-
-              {availableEmpresas.length > 0 && (
-                <Button onClick={calculateSuggestion} className="w-full">
-                  <Sparkles className="mr-2 h-4 w-4" />
-                  Calcular Distribución
-                </Button>
-              )}
+              <Button onClick={calculateSuggestion} className="w-full">
+                <Sparkles className="mr-2 h-4 w-4" />
+                Calcular Distribución
+              </Button>
             </>
+          )}
+
+          {selectedMeses.length > 0 && filteredHistoricalData.length === 0 && (
+            <p className="text-sm text-muted-foreground bg-muted p-3 rounded-md">
+              No hay datos históricos con presupuesto en los meses seleccionados
+            </p>
           )}
 
           {suggestedDistribution.length > 0 && (
@@ -317,6 +288,7 @@ export const SuggestedBudget = ({
                   <TableHeader>
                     <TableRow>
                       <TableHead>Marca</TableHead>
+                      <TableHead>Empresa</TableHead>
                       <TableHead className="text-right">Participación</TableHead>
                       <TableHead className="text-right">Monto Sugerido</TableHead>
                     </TableRow>
@@ -325,6 +297,7 @@ export const SuggestedBudget = ({
                     {suggestedDistribution.map((item, index) => (
                       <TableRow key={index}>
                         <TableCell className="font-medium">{item.marca}</TableCell>
+                        <TableCell>{item.empresa}</TableCell>
                         <TableCell className="text-right">
                           {item.porcentaje.toFixed(2)}%
                         </TableCell>
@@ -337,7 +310,7 @@ export const SuggestedBudget = ({
                       </TableRow>
                     ))}
                     <TableRow className="bg-muted/50 font-semibold">
-                      <TableCell>Total</TableCell>
+                      <TableCell colSpan={2}>Total</TableCell>
                       <TableCell className="text-right">100.00%</TableCell>
                       <TableCell className="text-right">
                         ${parseFloat(totalBudget).toLocaleString("es-ES", {
