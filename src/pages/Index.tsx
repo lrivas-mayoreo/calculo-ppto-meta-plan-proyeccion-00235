@@ -147,6 +147,22 @@ const Index = () => {
         const role = roleData?.role || null;
         setUserRole(role);
         setSimulatedRole(role);
+
+        // Load historical budgets from database
+        const { data: budgets } = await supabase
+          .from("budgets")
+          .select("marca, empresa, presupuesto, fecha_destino")
+          .eq("user_id", session.user.id);
+
+        if (budgets && budgets.length > 0) {
+          const historicalData = budgets.map(b => ({
+            marca: b.marca,
+            empresa: b.empresa,
+            presupuesto: b.presupuesto,
+            fechaDestino: b.fecha_destino
+          }));
+          setAllHistoricalBudgets(historicalData);
+        }
       }
     });
 
@@ -167,6 +183,22 @@ const Index = () => {
         const role = roleData?.role || null;
         setUserRole(role);
         setSimulatedRole(role);
+
+        // Load historical budgets from database
+        const { data: budgets } = await supabase
+          .from("budgets")
+          .select("marca, empresa, presupuesto, fecha_destino")
+          .eq("user_id", session.user.id);
+
+        if (budgets && budgets.length > 0) {
+          const historicalData = budgets.map(b => ({
+            marca: b.marca,
+            empresa: b.empresa,
+            presupuesto: b.presupuesto,
+            fechaDestino: b.fecha_destino
+          }));
+          setAllHistoricalBudgets(historicalData);
+        }
       }
     });
 
