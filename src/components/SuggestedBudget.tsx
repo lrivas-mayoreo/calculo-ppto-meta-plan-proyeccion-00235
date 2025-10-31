@@ -19,6 +19,15 @@ interface SuggestedBudgetProps {
   marcasDisponibles: string[];
   empresasDisponibles: string[];
   mesesDisponibles: string[];
+  ventasData: Array<{
+    mesAnio: string;
+    marca: string;
+    cliente: string;
+    articulo: string;
+    vendedor: string;
+    empresa: string;
+    venta: number;
+  }>;
   onApplySuggestion: (marcas: Array<{ marca: string; fechaDestino: string; empresa: string; presupuesto: number }>) => void;
 }
 
@@ -27,12 +36,13 @@ export const SuggestedBudget = ({
   marcasDisponibles, 
   empresasDisponibles, 
   mesesDisponibles,
+  ventasData,
   onApplySuggestion 
 }: SuggestedBudgetProps) => {
   const [totalBudget, setTotalBudget] = useState<string>("");
   const [targetDate, setTargetDate] = useState<string>("");
   const [selectedMeses, setSelectedMeses] = useState<string[]>([]);
-  const [suggestedDistribution, setSuggestedDistribution] = useState<Array<{ marca: string; empresa: string; porcentaje: number; monto: number }>>([]);
+  const [suggestedDistribution, setSuggestedDistribution] = useState<Array<{ marca: string; empresa: string; porcentaje: number; monto: number; promedioVenta: number }>>([]);
   const [isOpen, setIsOpen] = useState(false);
 
   // Convert date format to month-year format (e.g., "diciembre-2024")
@@ -107,30 +117,47 @@ export const SuggestedBudget = ({
 
     console.log("Datos filtrados totales:", filteredHistoricalData.length);
 
-    // Calculate total historical budget per brand + empresa combination
-    const brandEmpresaTotals = new Map<string, { empresa: string; total: number }>();
-    filteredHistoricalData.forEach(item => {
-      const key = `${item.marca}|${item.empresa}`;
-      const current = brandEmpresaTotals.get(key);
+    // Calculate average sales from ventasData using the same formula as main calculation
+    // Promedio = Σ(Ventas en Meses de Referencia) / Cantidad de Meses de Referencia
+    const brandEmpresaData = new Map<string, { empresa: string; totalVentas: number; totalPresupuesto: number }>();
+    
+    // First, get sales data from ventasData for selected months and available brands
+    const ventasMesesSeleccionados = ventasData.filter(v => selectedMeses.includes(v.mesAnio));
+    
+    ventasMesesSeleccionados.forEach(venta => {
+      const key = `${venta.marca}|${venta.empresa}`;
+      const current = brandEmpresaData.get(key);
       if (current) {
-        current.total += item.presupuesto;
+        current.totalVentas += venta.venta;
       } else {
-        brandEmpresaTotals.set(key, { empresa: item.empresa, total: item.presupuesto });
+        brandEmpresaData.set(key, { empresa: venta.empresa, totalVentas: venta.venta, totalPresupuesto: 0 });
       }
     });
 
-    console.log("Totales por marca+empresa:", Object.fromEntries(brandEmpresaTotals));
+    // Add historical budget data
+    filteredHistoricalData.forEach(item => {
+      const key = `${item.marca}|${item.empresa}`;
+      const current = brandEmpresaData.get(key);
+      if (current) {
+        current.totalPresupuesto += item.presupuesto;
+      } else {
+        brandEmpresaData.set(key, { empresa: item.empresa, totalVentas: 0, totalPresupuesto: item.presupuesto });
+      }
+    });
 
-    // Filter out brands with zero total
-    const validBrands = Array.from(brandEmpresaTotals.entries())
-      .filter(([_, data]) => data.total > 0)
+    console.log("Datos por marca+empresa:", Object.fromEntries(brandEmpresaData));
+
+    // Calculate average sales per brand using the formula
+    const validBrands = Array.from(brandEmpresaData.entries())
+      .filter(([_, data]) => data.totalPresupuesto > 0 && data.totalVentas > 0)
       .map(([key, data]) => {
         const [marca] = key.split('|');
-        return { marca, empresa: data.empresa, total: data.total };
+        const promedioVenta = data.totalVentas / selectedMeses.length; // Promedio = Σ(Ventas) / Cantidad de Meses
+        return { marca, empresa: data.empresa, total: data.totalPresupuesto, promedioVenta };
       });
 
     if (validBrands.length === 0) {
-      toast.error("No hay marcas con presupuesto válido en los meses seleccionados");
+      toast.error("No hay marcas con ventas y presupuesto en los meses seleccionados");
       return;
     }
 
@@ -141,12 +168,21 @@ export const SuggestedBudget = ({
       .map(item => {
         const porcentaje = (item.total / totalHistorical) * 100;
         const monto = (budget * porcentaje) / 100;
-        return { marca: item.marca, empresa: item.empresa, porcentaje, monto };
+        return { marca: item.marca, empresa: item.empresa, porcentaje, monto, promedioVenta: item.promedioVenta };
       })
       .sort((a, b) => b.porcentaje - a.porcentaje);
 
     setSuggestedDistribution(distribution);
-    toast.success(`Presupuesto distribuido entre ${distribution.length} marcas basado en ${filteredHistoricalData.length} registros históricos`);
+    
+    // Show average sales info
+    const promedioTotal = validBrands.reduce((sum, item) => sum + item.promedioVenta, 0);
+    const promedioGeneral = promedioTotal / validBrands.length;
+    
+    toast.success(`Presupuesto distribuido entre ${distribution.length} marcas`);
+    toast.info(`Promedio de ventas en meses seleccionados: $${promedioGeneral.toLocaleString("es-ES", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })}`);
   };
 
   const handleApply = () => {
@@ -298,7 +334,15 @@ export const SuggestedBudget = ({
                   <TableBody>
                     {suggestedDistribution.map((item, index) => (
                       <TableRow key={index}>
-                        <TableCell className="font-medium">{item.marca}</TableCell>
+                        <TableCell className="font-medium">
+                          {item.marca}
+                          <div className="text-xs text-muted-foreground">
+                            Promedio: ${item.promedioVenta.toLocaleString("es-ES", {
+                              minimumFractionDigits: 2,
+                              maximumFractionDigits: 2,
+                            })}
+                          </div>
+                        </TableCell>
                         <TableCell>{item.empresa}</TableCell>
                         <TableCell className="text-right">
                           {item.porcentaje.toFixed(2)}%

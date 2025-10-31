@@ -26,9 +26,18 @@ interface BudgetFormProps {
   mesesDisponibles: string[];
   onMarcasPresupuestoLoad: (marcas: MarcaPresupuesto[]) => void;
   historicalBudgets?: Array<{ marca: string; empresa: string; presupuesto: number; fechaDestino: string }>;
+  ventasData: Array<{
+    mesAnio: string;
+    marca: string;
+    cliente: string;
+    articulo: string;
+    vendedor: string;
+    empresa: string;
+    venta: number;
+  }>;
 }
 
-export const BudgetForm = ({ onCalculate, mockData, mesesDisponibles, onMarcasPresupuestoLoad, historicalBudgets = [] }: BudgetFormProps) => {
+export const BudgetForm = ({ onCalculate, mockData, mesesDisponibles, onMarcasPresupuestoLoad, historicalBudgets = [], ventasData }: BudgetFormProps) => {
   const [mesesReferencia, setMesesReferencia] = useState<string[]>([]);
   const [marcasPresupuesto, setMarcasPresupuesto] = useState<MarcaPresupuesto[]>([]);
   const [marcasConError, setMarcasConError] = useState<Array<{ marca: string; fechaDestino: string; empresa: string; presupuesto: number; error: string }>>([]);
@@ -269,6 +278,7 @@ export const BudgetForm = ({ onCalculate, mockData, mesesDisponibles, onMarcasPr
               marcasDisponibles={mockData.marcas}
               empresasDisponibles={mockData.empresas}
               mesesDisponibles={mesesDisponibles}
+              ventasData={ventasData}
               onApplySuggestion={(marcas) => {
                 setMarcasPresupuesto(marcas);
                 onMarcasPresupuestoLoad(marcas);

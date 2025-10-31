@@ -486,17 +486,18 @@ const Index = () => {
       <main className="container mx-auto px-4 py-8">
         <div className="space-y-6">
           <Card className="p-6 shadow-md">
-            <BudgetForm
-              onCalculate={handleCalculate}
-              mockData={{
-                marcas: MOCK_DATA.marcas,
-                empresas: MOCK_DATA.empresas,
-                articulos: MOCK_DATA.articulos,
-              }}
-              mesesDisponibles={mesesDisponibles}
-              onMarcasPresupuestoLoad={setMarcasPresupuesto}
-              historicalBudgets={allHistoricalBudgets}
-            />
+              <BudgetForm
+                onCalculate={handleCalculate}
+                mockData={{
+                  marcas: MOCK_DATA.marcas,
+                  empresas: MOCK_DATA.empresas,
+                  articulos: MOCK_DATA.articulos,
+                }}
+                mesesDisponibles={mesesDisponibles}
+                onMarcasPresupuestoLoad={setMarcasPresupuesto}
+                historicalBudgets={allHistoricalBudgets}
+                ventasData={MOCK_DATA.ventas}
+              />
           </Card>
 
           <div>
