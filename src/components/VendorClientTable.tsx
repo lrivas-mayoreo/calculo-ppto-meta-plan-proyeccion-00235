@@ -78,11 +78,16 @@ export const VendorClientTable = ({ result, vendorAdjustments, presupuestoTotal,
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
     
+    console.log("=== DEBUG VENTAS MES ANTERIOR ===");
+    
     // Load all codes mappings
     const [clientsRes, brandsRes] = await Promise.all([
       supabase.from('clientes').select('nombre, codigo').eq('user_id', user.id),
       supabase.from('marcas').select('nombre, codigo').eq('user_id', user.id),
     ]);
+    
+    console.log("Clientes cargados:", clientsRes.data?.length || 0, clientsRes.data);
+    console.log("Marcas cargadas:", brandsRes.data?.length || 0, brandsRes.data);
     
     const clientCodes = new Map(clientsRes.data?.map(c => [c.nombre, c.codigo]) || []);
     const brandCodes = new Map(brandsRes.data?.map(b => [b.nombre, b.codigo]) || []);
@@ -91,7 +96,12 @@ export const VendorClientTable = ({ result, vendorAdjustments, presupuestoTotal,
       const previousMonth = getPreviousMonth(marca.fechaDestino);
       const codigoMarca = brandCodes.get(marca.marca);
       
-      if (!codigoMarca) continue;
+      console.log(`Marca: ${marca.marca}, Fecha destino: ${marca.fechaDestino}, Mes anterior: ${previousMonth}, Código: ${codigoMarca}`);
+      
+      if (!codigoMarca) {
+        console.warn(`No se encontró código para marca: ${marca.marca}`);
+        continue;
+      }
       
       // Get unique clients and vendors from this brand
       for (const cliente of marca.distribucionClientes) {
@@ -99,9 +109,12 @@ export const VendorClientTable = ({ result, vendorAdjustments, presupuestoTotal,
         const codigoCliente = clientCodes.get(cliente.cliente);
         
         if (!codigoCliente) {
+          console.warn(`No se encontró código para cliente: ${cliente.cliente}`);
           salesByKey[key] = 0;
           continue;
         }
+        
+        console.log(`Consultando ventas: mes=${previousMonth}, marca=${codigoMarca}, cliente=${codigoCliente}`);
         
         // Query ventas_reales for previous month
         const { data, error } = await supabase
@@ -112,14 +125,22 @@ export const VendorClientTable = ({ result, vendorAdjustments, presupuestoTotal,
           .eq('codigo_cliente', codigoCliente)
           .eq('user_id', user.id);
         
+        if (error) {
+          console.error("Error consultando ventas_reales:", error);
+        }
+        
         if (data && data.length > 0) {
-          salesByKey[key] = data.reduce((sum, sale) => sum + Number(sale.monto), 0);
+          const total = data.reduce((sum, sale) => sum + Number(sale.monto), 0);
+          salesByKey[key] = total;
+          console.log(`✓ Ventas encontradas para ${key}: $${total}`);
         } else {
           salesByKey[key] = 0;
+          console.log(`✗ No se encontraron ventas para ${key}`);
         }
       }
     }
     
+    console.log("=== RESUMEN VENTAS MES ANTERIOR ===", salesByKey);
     setPreviousMonthSales(salesByKey);
   };
 
