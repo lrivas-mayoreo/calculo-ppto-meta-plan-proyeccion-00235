@@ -334,7 +334,7 @@ export const BudgetResults = ({ result }: BudgetResultsProps) => {
                       <TableHead>Artículo</TableHead>
                       <TableHead className="text-right">Venta Real</TableHead>
                       <TableHead className="text-right">
-                        Venta Ajustada
+                        Ppto Asociado
                       </TableHead>
                       <TableHead className="text-right">Variación</TableHead>
                     </TableRow>

@@ -233,10 +233,16 @@ export const VendorClientTable = ({ result, vendorAdjustments, presupuestoTotal,
         role: (userRole as "administrador" | "gerente" | "admin_ventas") || 'administrador',
       }));
 
-      const { error } = await supabase.from('budgets').upsert(updates, {
-        onConflict: 'user_id,marca,empresa,fecha_destino',
-        ignoreDuplicates: false,
-      });
+      // First delete existing entries for these brands
+      const marcasToUpdate = [...new Set(updates.map(u => u.marca))];
+      await supabase
+        .from('budgets')
+        .delete()
+        .eq('user_id', userId)
+        .in('marca', marcasToUpdate);
+
+      // Then insert new values
+      const { error } = await supabase.from('budgets').insert(updates);
 
       if (error) throw error;
       toast.success("Ajustes guardados exitosamente");
