@@ -24,14 +24,18 @@ import {
 } from "@/components/ui/select";
 import { Settings, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 
 interface VendorAdjustmentProps {
   vendedores: string[];
   presupuestoTotal: number;
   onAdjust: (adjustments: Record<string, { value: number; type: "percentage" | "currency" }>) => void;
+  marcasPresupuesto: Array<{ marca: string; empresa: string; presupuesto: number; fechaDestino: string }>;
+  userId: string;
+  userRole: string | null;
 }
 
-export const VendorAdjustment = ({ vendedores, presupuestoTotal, onAdjust }: VendorAdjustmentProps) => {
+export const VendorAdjustment = ({ vendedores, presupuestoTotal, onAdjust, marcasPresupuesto, userId, userRole }: VendorAdjustmentProps) => {
   const [open, setOpen] = useState(false);
   const [adjustmentType, setAdjustmentType] = useState<"percentage" | "currency">("currency");
   const initialValue = adjustmentType === "percentage" ? 100 : presupuestoTotal / vendedores.length;
@@ -83,7 +87,7 @@ export const VendorAdjustment = ({ vendedores, presupuestoTotal, onAdjust }: Ven
     setFixedVendors(new Set());
   };
 
-  const handleApply = () => {
+  const handleApply = async () => {
     const total = Object.values(adjustments).reduce((sum, val) => sum + val, 0);
     const expectedTotal = adjustmentType === "percentage" 
       ? 100 
@@ -118,6 +122,30 @@ export const VendorAdjustment = ({ vendedores, presupuestoTotal, onAdjust }: Ven
         )
         .join(", ");
       toast.warning(`Ajuste aplicado: ${message}`);
+    }
+
+    // Save adjustments to database
+    try {
+      const updates = marcasPresupuesto.map(mp => ({
+        user_id: userId,
+        marca: mp.marca,
+        empresa: mp.empresa,
+        presupuesto: mp.presupuesto,
+        fecha_destino: mp.fechaDestino,
+        vendor_adjustments: adjustmentsWithType,
+        role: (userRole as "administrador" | "gerente" | "admin_ventas") || 'administrador',
+      }));
+
+      const { error } = await supabase.from('budgets').upsert(updates, {
+        onConflict: 'user_id,marca,empresa,fecha_destino',
+        ignoreDuplicates: false,
+      });
+
+      if (error) throw error;
+      toast.success("Ajustes guardados en la base de datos");
+    } catch (error) {
+      console.error("Error saving vendor adjustments:", error);
+      toast.error("Error al guardar ajustes");
     }
 
     onAdjust(adjustmentsWithType);

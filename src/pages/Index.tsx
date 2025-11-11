@@ -127,6 +127,7 @@ const Index = () => {
     value: number;
     type: "percentage" | "currency";
   }>>({});
+  const [brandAdjustments, setBrandAdjustments] = useState<Record<string, number>>({});
   const [allHistoricalBudgets, setAllHistoricalBudgets] = useState<Array<{
     marca: string;
     empresa: string;
@@ -155,7 +156,7 @@ const Index = () => {
         // Load historical budgets from database
         const {
           data: budgets
-        } = await supabase.from("budgets").select("marca, empresa, presupuesto, fecha_destino").eq("user_id", session.user.id);
+        } = await supabase.from("budgets").select("marca, empresa, presupuesto, fecha_destino, vendor_adjustments").eq("user_id", session.user.id);
         if (budgets && budgets.length > 0) {
           const historicalData = budgets.map(b => ({
             marca: b.marca,
@@ -164,6 +165,16 @@ const Index = () => {
             fechaDestino: b.fecha_destino
           }));
           setAllHistoricalBudgets(historicalData);
+          
+          // Load vendor adjustments from last budget
+          if (budgets[0]?.vendor_adjustments) {
+            const adjustments = budgets[0].vendor_adjustments as any;
+            if (adjustments.brandAdjustments) {
+              setBrandAdjustments(adjustments.brandAdjustments);
+            } else {
+              setVendorAdjustments(adjustments);
+            }
+          }
         }
       }
     });
@@ -188,7 +199,7 @@ const Index = () => {
         // Load historical budgets from database
         const {
           data: budgets
-        } = await supabase.from("budgets").select("marca, empresa, presupuesto, fecha_destino").eq("user_id", session.user.id);
+        } = await supabase.from("budgets").select("marca, empresa, presupuesto, fecha_destino, vendor_adjustments").eq("user_id", session.user.id);
         if (budgets && budgets.length > 0) {
           const historicalData = budgets.map(b => ({
             marca: b.marca,
@@ -197,6 +208,16 @@ const Index = () => {
             fechaDestino: b.fecha_destino
           }));
           setAllHistoricalBudgets(historicalData);
+          
+          // Load vendor adjustments from last budget
+          if (budgets[0]?.vendor_adjustments) {
+            const adjustments = budgets[0].vendor_adjustments as any;
+            if (adjustments.brandAdjustments) {
+              setBrandAdjustments(adjustments.brandAdjustments);
+            } else {
+              setVendorAdjustments(adjustments);
+            }
+          }
         }
       }
     });
@@ -455,11 +476,21 @@ const Index = () => {
       <main className="container mx-auto px-4 py-8">
         <div className="space-y-6">
           <Card className="p-6 shadow-md">
-              <BudgetForm onCalculate={handleCalculate} mockData={{
-            marcas: MOCK_DATA.marcas,
-            empresas: MOCK_DATA.empresas,
-            articulos: MOCK_DATA.articulos
-          }} mesesDisponibles={mesesDisponibles} onMarcasPresupuestoLoad={setMarcasPresupuesto} historicalBudgets={allHistoricalBudgets} ventasData={MOCK_DATA.ventas} />
+              <BudgetForm 
+                onCalculate={handleCalculate} 
+                mockData={{
+                  marcas: MOCK_DATA.marcas,
+                  empresas: MOCK_DATA.empresas,
+                  articulos: MOCK_DATA.articulos
+                }} 
+                mesesDisponibles={mesesDisponibles} 
+                onMarcasPresupuestoLoad={setMarcasPresupuesto} 
+                historicalBudgets={allHistoricalBudgets} 
+                ventasData={MOCK_DATA.ventas}
+                vendorAdjustments={vendorAdjustments}
+                brandAdjustments={brandAdjustments}
+                presupuestoTotal={marcasPresupuesto.reduce((sum, mp) => sum + mp.presupuesto, 0)}
+              />
           </Card>
 
           <div>
@@ -476,7 +507,14 @@ const Index = () => {
 
                 <TabsContent value="results" className="space-y-6">
                   {result && activeRole === "administrador" && vendedoresUnicos.length > 0 && <Card className="p-4">
-                      <VendorAdjustment vendedores={vendedoresUnicos} presupuestoTotal={result.totalPresupuesto} onAdjust={setVendorAdjustments} />
+                      <VendorAdjustment 
+                        vendedores={vendedoresUnicos} 
+                        presupuestoTotal={result.totalPresupuesto} 
+                        onAdjust={setVendorAdjustments}
+                        marcasPresupuesto={marcasPresupuesto}
+                        userId={user.id}
+                        userRole={userRole}
+                      />
                     </Card>}
                   
                   {result && <>
@@ -499,7 +537,15 @@ const Index = () => {
                 </TabsContent>
 
                 {result && (activeRole === "administrador" || activeRole === "admin_ventas") && <TabsContent value="vendors">
-                    <VendorClientTable result={result} vendorAdjustments={vendorAdjustments} presupuestoTotal={result.totalPresupuesto} userRole={activeRole} />
+                    <VendorClientTable 
+                      result={result} 
+                      vendorAdjustments={vendorAdjustments} 
+                      presupuestoTotal={result.totalPresupuesto} 
+                      userRole={activeRole}
+                      marcasPresupuesto={marcasPresupuesto}
+                      userId={user.id}
+                      onBrandAdjustmentsChange={setBrandAdjustments}
+                    />
                   </TabsContent>}
 
                 <TabsContent value="import">
@@ -517,7 +563,14 @@ const Index = () => {
 
                 <TabsContent value="results" className="space-y-6">
                   {result && (activeRole === "administrador" || activeRole === "gerente" || activeRole === "admin_ventas") && vendedoresUnicos.length > 0 && <Card className="p-4">
-                      <VendorAdjustment vendedores={vendedoresUnicos} presupuestoTotal={result.totalPresupuesto} onAdjust={setVendorAdjustments} />
+                      <VendorAdjustment 
+                        vendedores={vendedoresUnicos} 
+                        presupuestoTotal={result.totalPresupuesto} 
+                        onAdjust={setVendorAdjustments}
+                        marcasPresupuesto={marcasPresupuesto}
+                        userId={user.id}
+                        userRole={userRole}
+                      />
                     </Card>}
                   
                   {result && <>
@@ -540,7 +593,15 @@ const Index = () => {
                 </TabsContent>
 
                 {result && (activeRole === "gerente" || activeRole === "admin_ventas") && <TabsContent value="vendors">
-                    <VendorClientTable result={result} vendorAdjustments={vendorAdjustments} presupuestoTotal={result.totalPresupuesto} userRole={activeRole} />
+                    <VendorClientTable 
+                      result={result} 
+                      vendorAdjustments={vendorAdjustments} 
+                      presupuestoTotal={result.totalPresupuesto} 
+                      userRole={activeRole}
+                      marcasPresupuesto={marcasPresupuesto}
+                      userId={user.id}
+                      onBrandAdjustmentsChange={setBrandAdjustments}
+                    />
                   </TabsContent>}
               </Tabs>}
           </div>

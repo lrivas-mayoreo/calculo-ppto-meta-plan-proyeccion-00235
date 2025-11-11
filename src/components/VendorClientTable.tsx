@@ -22,6 +22,9 @@ interface VendorClientTableProps {
   vendorAdjustments: Record<string, { value: number; type: "percentage" | "currency" }>;
   presupuestoTotal: number;
   userRole: string | null;
+  marcasPresupuesto: Array<{ marca: string; empresa: string; presupuesto: number; fechaDestino: string }>;
+  userId: string;
+  onBrandAdjustmentsChange?: (adjustments: Record<string, number>) => void;
 }
 
 interface VendorClientData {
@@ -37,7 +40,7 @@ interface VendorClientData {
   key: string;
 }
 
-export const VendorClientTable = ({ result, vendorAdjustments, presupuestoTotal, userRole }: VendorClientTableProps) => {
+export const VendorClientTable = ({ result, vendorAdjustments, presupuestoTotal, userRole, marcasPresupuesto, userId, onBrandAdjustmentsChange }: VendorClientTableProps) => {
   const [vendorClientData, setVendorClientData] = useState<VendorClientData[]>([]);
   const [manualAdjustments, setManualAdjustments] = useState<Record<string, number>>({});
   const [brandAdjustments, setBrandAdjustments] = useState<Record<string, number>>({});
@@ -203,15 +206,44 @@ export const VendorClientTable = ({ result, vendorAdjustments, presupuestoTotal,
 
   const handleBrandAdjustment = (marca: string, value: string) => {
     const numValue = parseFloat(value) || 0;
-    setBrandAdjustments((prev) => ({
-      ...prev,
-      [marca]: numValue,
-    }));
+    setBrandAdjustments((prev) => {
+      const newAdjustments = {
+        ...prev,
+        [marca]: numValue,
+      };
+      if (onBrandAdjustmentsChange) {
+        onBrandAdjustmentsChange(newAdjustments);
+      }
+      return newAdjustments;
+    });
   };
 
-  const applyAdjustments = () => {
+  const applyAdjustments = async () => {
     calculateVendorClientData();
-    toast.success("Ajustes aplicados exitosamente");
+    
+    // Save brand adjustments to database
+    try {
+      const updates = marcasPresupuesto.map(mp => ({
+        user_id: userId,
+        marca: mp.marca,
+        empresa: mp.empresa,
+        presupuesto: mp.presupuesto,
+        fecha_destino: mp.fechaDestino,
+        vendor_adjustments: { brandAdjustments },
+        role: (userRole as "administrador" | "gerente" | "admin_ventas") || 'administrador',
+      }));
+
+      const { error } = await supabase.from('budgets').upsert(updates, {
+        onConflict: 'user_id,marca,empresa,fecha_destino',
+        ignoreDuplicates: false,
+      });
+
+      if (error) throw error;
+      toast.success("Ajustes guardados exitosamente");
+    } catch (error) {
+      console.error("Error saving brand adjustments:", error);
+      toast.error("Error al guardar ajustes");
+    }
   };
 
   const exportToExcel = () => {

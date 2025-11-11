@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Calculator, Upload, X, Download, Eye, Info } from "lucide-react";
+import { Calculator, Upload, X, Download, Eye, Info, Settings } from "lucide-react";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
 import type { MarcaPresupuesto } from "@/pages/Index";
@@ -35,9 +35,12 @@ interface BudgetFormProps {
     empresa: string;
     venta: number;
   }>;
+  vendorAdjustments?: Record<string, { value: number; type: "percentage" | "currency" }>;
+  brandAdjustments?: Record<string, number>;
+  presupuestoTotal?: number;
 }
 
-export const BudgetForm = ({ onCalculate, mockData, mesesDisponibles, onMarcasPresupuestoLoad, historicalBudgets = [], ventasData }: BudgetFormProps) => {
+export const BudgetForm = ({ onCalculate, mockData, mesesDisponibles, onMarcasPresupuestoLoad, historicalBudgets = [], ventasData, vendorAdjustments = {}, brandAdjustments = {}, presupuestoTotal = 0 }: BudgetFormProps) => {
   const [mesesReferencia, setMesesReferencia] = useState<string[]>([]);
   const [marcasPresupuesto, setMarcasPresupuesto] = useState<MarcaPresupuesto[]>([]);
   const [marcasConError, setMarcasConError] = useState<Array<{ marca: string; fechaDestino: string; empresa: string; presupuesto: number; error: string }>>([]);
@@ -466,6 +469,79 @@ export const BudgetForm = ({ onCalculate, mockData, mesesDisponibles, onMarcasPr
         <Calculator className="mr-2 h-4 w-4" />
         Calcular Presupuesto
       </Button>
+
+      {/* Sección de Ajustes Configurables */}
+      {(Object.keys(vendorAdjustments).length > 0 || Object.keys(brandAdjustments).length > 0) && (
+        <div className="mt-6 space-y-4 rounded-lg border border-border bg-muted/30 p-4">
+          <div className="flex items-center gap-2">
+            <Settings className="h-5 w-5 text-primary" />
+            <h3 className="text-base font-semibold text-foreground">Ajustes Configurables</h3>
+          </div>
+
+          {Object.keys(vendorAdjustments).length > 0 && (
+            <div className="space-y-2">
+              <h4 className="text-sm font-medium text-foreground">Ajustes de Vendedores:</h4>
+              <div className="rounded-md border border-border bg-card p-3">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Vendedor</TableHead>
+                      <TableHead className="text-right">Valor Ajustado</TableHead>
+                      <TableHead className="text-right">Presupuesto</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {Object.entries(vendorAdjustments).map(([vendor, adj]) => {
+                      const budget = adj.type === "percentage" 
+                        ? (presupuestoTotal * adj.value) / 100 
+                        : adj.value;
+                      return (
+                        <TableRow key={vendor}>
+                          <TableCell className="font-medium">{vendor}</TableCell>
+                          <TableCell className="text-right">
+                            {adj.type === "percentage" 
+                              ? `${adj.value.toFixed(2)}%` 
+                              : `$${adj.value.toLocaleString("es-ES", { minimumFractionDigits: 2 })}`}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            ${budget.toLocaleString("es-ES", { minimumFractionDigits: 2 })}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
+          )}
+
+          {Object.keys(brandAdjustments).length > 0 && (
+            <div className="space-y-2">
+              <h4 className="text-sm font-medium text-foreground">Ajustes de Marcas:</h4>
+              <div className="rounded-md border border-border bg-card p-3">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Marca</TableHead>
+                      <TableHead className="text-right">Ajuste Total</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {Object.entries(brandAdjustments).map(([marca, ajuste]) => (
+                      <TableRow key={marca}>
+                        <TableCell className="font-medium">{marca}</TableCell>
+                        <TableCell className="text-right">
+                          ${ajuste.toLocaleString("es-ES", { minimumFractionDigits: 2 })}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </form>
   );
 };
