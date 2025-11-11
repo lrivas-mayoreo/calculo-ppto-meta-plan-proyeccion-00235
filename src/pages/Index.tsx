@@ -509,7 +509,9 @@ const Index = () => {
                   {result && activeRole === "administrador" && vendedoresUnicos.length > 0 && <Card className="p-4">
                       <VendorAdjustment 
                         vendedores={vendedoresUnicos} 
-                        presupuestoTotal={result.totalPresupuesto} 
+                        presupuestoTotal={result.resultadosMarcas.reduce((sum, m) => 
+                          sum + m.distribucionClientes.reduce((s, c) => s + c.subtotal, 0), 0
+                        )} 
                         onAdjust={setVendorAdjustments}
                         marcasPresupuesto={marcasPresupuesto}
                         userId={user.id}
@@ -521,24 +523,25 @@ const Index = () => {
                   <div className="grid gap-4 md:grid-cols-4">
                     <MetricsCard 
                       title="Presupuesto Base" 
-                      value={`$${result.totalPresupuesto.toLocaleString("es-ES", {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2
-                      })}`} 
-                      icon={TrendingUp} 
-                      trend="neutral" 
-                    />
-                    <MetricsCard 
-                      title="Ppto Asociado" 
                       value={`$${result.resultadosMarcas.reduce((sum, m) => 
                         sum + m.distribucionClientes.reduce((s, c) => s + c.subtotal, 0), 0
                       ).toLocaleString("es-ES", {
                         minimumFractionDigits: 2,
                         maximumFractionDigits: 2
                       })}`} 
+                      icon={TrendingUp} 
+                      trend="neutral" 
+                      subtitle="Suma Ppto Asociado"
+                    />
+                    <MetricsCard 
+                      title="Ppto Excel" 
+                      value={`$${result.totalPresupuesto.toLocaleString("es-ES", {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2
+                      })}`} 
                       icon={Calculator} 
-                      trend="positive" 
-                      subtitle="Suma vendedores-clientes" 
+                      trend="neutral" 
+                      subtitle="Total del archivo"
                     />
                     <MetricsCard 
                       title="Venta Real" 
@@ -572,7 +575,9 @@ const Index = () => {
                     <VendorClientTable 
                       result={result} 
                       vendorAdjustments={vendorAdjustments} 
-                      presupuestoTotal={result.totalPresupuesto} 
+                      presupuestoTotal={result.resultadosMarcas.reduce((sum, m) => 
+                        sum + m.distribucionClientes.reduce((s, c) => s + c.subtotal, 0), 0
+                      )} 
                       userRole={activeRole}
                       marcasPresupuesto={marcasPresupuesto}
                       userId={user.id}
@@ -597,7 +602,9 @@ const Index = () => {
                   {result && (activeRole === "administrador" || activeRole === "gerente" || activeRole === "admin_ventas") && vendedoresUnicos.length > 0 && <Card className="p-4">
                       <VendorAdjustment 
                         vendedores={vendedoresUnicos} 
-                        presupuestoTotal={result.totalPresupuesto} 
+                        presupuestoTotal={result.resultadosMarcas.reduce((sum, m) => 
+                          sum + m.distribucionClientes.reduce((s, c) => s + c.subtotal, 0), 0
+                        )} 
                         onAdjust={setVendorAdjustments}
                         marcasPresupuesto={marcasPresupuesto}
                         userId={user.id}
@@ -609,24 +616,25 @@ const Index = () => {
                   <div className="grid gap-4 md:grid-cols-4">
                     <MetricsCard 
                       title="Presupuesto Base" 
-                      value={`$${result.totalPresupuesto.toLocaleString("es-ES", {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2
-                      })}`} 
-                      icon={TrendingUp} 
-                      trend="neutral" 
-                    />
-                    <MetricsCard 
-                      title="Ppto Asociado" 
                       value={`$${result.resultadosMarcas.reduce((sum, m) => 
                         sum + m.distribucionClientes.reduce((s, c) => s + c.subtotal, 0), 0
                       ).toLocaleString("es-ES", {
                         minimumFractionDigits: 2,
                         maximumFractionDigits: 2
                       })}`} 
+                      icon={TrendingUp} 
+                      trend="neutral" 
+                      subtitle="Suma Ppto Asociado"
+                    />
+                    <MetricsCard 
+                      title="Ppto Excel" 
+                      value={`$${result.totalPresupuesto.toLocaleString("es-ES", {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2
+                      })}`} 
                       icon={Calculator} 
-                      trend="positive" 
-                      subtitle="Suma vendedores-clientes" 
+                      trend="neutral" 
+                      subtitle="Total del archivo"
                     />
                     <MetricsCard 
                       title="Venta Real" 
@@ -660,7 +668,9 @@ const Index = () => {
                     <VendorClientTable 
                       result={result} 
                       vendorAdjustments={vendorAdjustments} 
-                      presupuestoTotal={result.totalPresupuesto} 
+                      presupuestoTotal={result.resultadosMarcas.reduce((sum, m) => 
+                        sum + m.distribucionClientes.reduce((s, c) => s + c.subtotal, 0), 0
+                      )} 
                       userRole={activeRole}
                       marcasPresupuesto={marcasPresupuesto}
                       userId={user.id}
