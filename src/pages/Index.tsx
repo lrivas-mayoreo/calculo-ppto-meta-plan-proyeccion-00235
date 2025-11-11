@@ -29,7 +29,7 @@ const MOCK_DATA = {
     Adidas: ["Adidas Ultraboost", "Adidas NMD", "Adidas Superstar"],
     Puma: ["Puma Suede", "Puma RS-X", "Puma Clyde"],
     Reebok: ["Reebok Classic", "Reebok Nano", "Reebok Zig"],
-    "New Balance": ["New Balance 574", "New Balance 990", "New Balance 327"],
+    "New Balance": ["New Balance 574", "New Balance 990", "New Balance 327"]
   } as Record<string, string[]>,
   ventas: [] as Array<{
     mesAnio: string;
@@ -39,31 +39,30 @@ const MOCK_DATA = {
     vendedor: string;
     empresa: string;
     venta: number;
-  }>,
+  }>
 };
-
 const generarMesesAnio = () => {
   const meses = [];
   const hoy = new Date();
   for (let i = 0; i < 24; i++) {
     const fecha = new Date(hoy.getFullYear(), hoy.getMonth() - i, 1);
-    const mes = fecha.toLocaleString("es-ES", { month: "long" });
+    const mes = fecha.toLocaleString("es-ES", {
+      month: "long"
+    });
     const anio = fecha.getFullYear();
     meses.push(`${mes}-${anio}`);
   }
   return meses;
 };
-
 const mesesDisponibles = generarMesesAnio();
 
 // Generar datos de ventas para los últimos 24 meses (excepto New Balance que no tiene ventas)
-mesesDisponibles.forEach((mesAnio) => {
-  MOCK_DATA.marcas.forEach((marca) => {
+mesesDisponibles.forEach(mesAnio => {
+  MOCK_DATA.marcas.forEach(marca => {
     // New Balance no tiene ventas (para demostrar Error 3)
     if (marca === "New Balance") return;
-    
-    MOCK_DATA.clientes.forEach((cliente) => {
-      MOCK_DATA.articulos[marca]?.forEach((articulo) => {
+    MOCK_DATA.clientes.forEach(cliente => {
+      MOCK_DATA.articulos[marca]?.forEach(articulo => {
         const vendedor = MOCK_DATA.vendedores[Math.floor(Math.random() * MOCK_DATA.vendedores.length)];
         const empresa = MOCK_DATA.empresas[Math.floor(Math.random() * MOCK_DATA.empresas.length)];
         MOCK_DATA.ventas.push({
@@ -73,20 +72,18 @@ mesesDisponibles.forEach((mesAnio) => {
           articulo,
           vendedor,
           empresa,
-          venta: Math.random() * 10000 + 5000,
+          venta: Math.random() * 10000 + 5000
         });
       });
     });
   });
 });
-
 export interface MarcaPresupuesto {
   marca: string;
   fechaDestino: string;
   empresa: string;
   presupuesto: number;
 }
-
 export interface CalculationResult {
   totalPresupuesto: number;
   promedioVentaReferencia: number;
@@ -118,7 +115,6 @@ export interface CalculationResult {
     mensaje: string;
   }>;
 }
-
 const Index = () => {
   const navigate = useNavigate();
   const [session, setSession] = useState<Session | null>(null);
@@ -127,34 +123,39 @@ const Index = () => {
   const [simulatedRole, setSimulatedRole] = useState<string | null>(null);
   const [result, setResult] = useState<CalculationResult | null>(null);
   const [marcasPresupuesto, setMarcasPresupuesto] = useState<MarcaPresupuesto[]>([]);
-  const [vendorAdjustments, setVendorAdjustments] = useState<Record<string, { value: number; type: "percentage" | "currency" }>>({});
-  const [allHistoricalBudgets, setAllHistoricalBudgets] = useState<Array<{ marca: string; empresa: string; presupuesto: number; fechaDestino: string }>>([]);
-
+  const [vendorAdjustments, setVendorAdjustments] = useState<Record<string, {
+    value: number;
+    type: "percentage" | "currency";
+  }>>({});
+  const [allHistoricalBudgets, setAllHistoricalBudgets] = useState<Array<{
+    marca: string;
+    empresa: string;
+    presupuesto: number;
+    fechaDestino: string;
+  }>>([]);
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+    const {
+      data: {
+        subscription
+      }
+    } = supabase.auth.onAuthStateChange(async (event, session) => {
       setSession(session);
       setUser(session?.user ?? null);
-      
       if (!session) {
         navigate("/auth");
       } else {
         // Load user role
-        const { data: roleData } = await supabase
-          .from("user_roles")
-          .select("role")
-          .eq("user_id", session.user.id)
-          .maybeSingle();
-        
+        const {
+          data: roleData
+        } = await supabase.from("user_roles").select("role").eq("user_id", session.user.id).maybeSingle();
         const role = roleData?.role || null;
         setUserRole(role);
         setSimulatedRole(role);
 
         // Load historical budgets from database
-        const { data: budgets } = await supabase
-          .from("budgets")
-          .select("marca, empresa, presupuesto, fecha_destino")
-          .eq("user_id", session.user.id);
-
+        const {
+          data: budgets
+        } = await supabase.from("budgets").select("marca, empresa, presupuesto, fecha_destino").eq("user_id", session.user.id);
         if (budgets && budgets.length > 0) {
           const historicalData = budgets.map(b => ({
             marca: b.marca,
@@ -166,31 +167,28 @@ const Index = () => {
         }
       }
     });
-
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
+    supabase.auth.getSession().then(async ({
+      data: {
+        session
+      }
+    }) => {
       setSession(session);
       setUser(session?.user ?? null);
-      
       if (!session) {
         navigate("/auth");
       } else {
         // Load user role
-        const { data: roleData } = await supabase
-          .from("user_roles")
-          .select("role")
-          .eq("user_id", session.user.id)
-          .maybeSingle();
-        
+        const {
+          data: roleData
+        } = await supabase.from("user_roles").select("role").eq("user_id", session.user.id).maybeSingle();
         const role = roleData?.role || null;
         setUserRole(role);
         setSimulatedRole(role);
 
         // Load historical budgets from database
-        const { data: budgets } = await supabase
-          .from("budgets")
-          .select("marca, empresa, presupuesto, fecha_destino")
-          .eq("user_id", session.user.id);
-
+        const {
+          data: budgets
+        } = await supabase.from("budgets").select("marca, empresa, presupuesto, fecha_destino").eq("user_id", session.user.id);
         if (budgets && budgets.length > 0) {
           const historicalData = budgets.map(b => ({
             marca: b.marca,
@@ -202,26 +200,24 @@ const Index = () => {
         }
       }
     });
-
     return () => subscription.unsubscribe();
   }, [navigate]);
-
   const handleSignOut = async () => {
     await supabase.auth.signOut();
     navigate("/auth");
   };
-
-  const handleCalculate = (
-    marcasPresupuesto: MarcaPresupuesto[],
-    mesesReferencia: string[]
-  ) => {
+  const handleCalculate = (marcasPresupuesto: MarcaPresupuesto[], mesesReferencia: string[]) => {
     const resultadosMarcas: CalculationResult["resultadosMarcas"] = [];
     const errores: CalculationResult["errores"] = [];
     let totalPresupuestoGeneral = 0;
     let totalPromedioReferenciaGeneral = 0;
-
-    marcasPresupuesto.forEach((marcaPresupuesto) => {
-      const { marca, fechaDestino, empresa, presupuesto } = marcaPresupuesto;
+    marcasPresupuesto.forEach(marcaPresupuesto => {
+      const {
+        marca,
+        fechaDestino,
+        empresa,
+        presupuesto
+      } = marcaPresupuesto;
 
       // Validación Error 1: Marca no existe
       if (!MOCK_DATA.marcas.includes(marca)) {
@@ -230,15 +226,13 @@ const Index = () => {
           marca,
           fechaDestino,
           empresa,
-          mensaje: `La marca "${marca}" no existe en el maestro de marcas`,
+          mensaje: `La marca "${marca}" no existe en el maestro de marcas`
         });
         return;
       }
 
       // Obtener ventas de los meses de referencia para esta marca y empresa
-      const ventasMesesReferencia = MOCK_DATA.ventas.filter(
-        (v) => mesesReferencia.includes(v.mesAnio) && v.marca === marca && v.empresa === empresa
-      );
+      const ventasMesesReferencia = MOCK_DATA.ventas.filter(v => mesesReferencia.includes(v.mesAnio) && v.marca === marca && v.empresa === empresa);
 
       // Validación Error 4: Marca sin ventas en meses de referencia
       if (ventasMesesReferencia.length === 0) {
@@ -247,7 +241,7 @@ const Index = () => {
           marca,
           fechaDestino,
           empresa,
-          mensaje: `La marca "${marca}" de la empresa "${empresa}" no tiene ventas en los meses de referencia seleccionados`,
+          mensaje: `La marca "${marca}" de la empresa "${empresa}" no tiene ventas en los meses de referencia seleccionados`
         });
         return;
       }
@@ -263,36 +257,40 @@ const Index = () => {
           marca,
           fechaDestino,
           empresa,
-          mensaje: `Falta de venta para distribución del presupuesto de la marca "${marca}" en la empresa "${empresa}"`,
+          mensaje: `Falta de venta para distribución del presupuesto de la marca "${marca}" en la empresa "${empresa}"`
         });
         return;
       }
 
       // Calcular factor de ajuste a nivel de marca
       const factorMarca = presupuesto / promedioVentaMarca;
-      const porcentajeCambio = ((factorMarca - 1) * 100);
+      const porcentajeCambio = (factorMarca - 1) * 100;
 
       // Agrupar ventas por cliente para esta marca
-      const ventasPorCliente = new Map<string, { cliente: string; vendedor: string; empresa: string; ventas: typeof MOCK_DATA.ventas }>();
-
-      ventasMesesReferencia.forEach((venta) => {
+      const ventasPorCliente = new Map<string, {
+        cliente: string;
+        vendedor: string;
+        empresa: string;
+        ventas: typeof MOCK_DATA.ventas;
+      }>();
+      ventasMesesReferencia.forEach(venta => {
         if (!ventasPorCliente.has(venta.cliente)) {
           ventasPorCliente.set(venta.cliente, {
             cliente: venta.cliente,
             vendedor: venta.vendedor,
             empresa: venta.empresa,
-            ventas: [],
+            ventas: []
           });
         }
         ventasPorCliente.get(venta.cliente)!.ventas.push(venta);
       });
 
       // Calcular distribución por cliente
-      const distribucionClientes = Array.from(ventasPorCliente.values()).map((clienteData) => {
+      const distribucionClientes = Array.from(ventasPorCliente.values()).map(clienteData => {
         const articulosMap = new Map<string, number>();
 
         // Sumar ventas por artículo
-        clienteData.ventas.forEach((venta) => {
+        clienteData.ventas.forEach(venta => {
           const ventaActual = articulosMap.get(venta.articulo) || 0;
           articulosMap.set(venta.articulo, ventaActual + venta.venta);
         });
@@ -302,26 +300,22 @@ const Index = () => {
           const ventaPromedio = ventaTotal / mesesReferencia.length;
           const ventaAjustada = ventaPromedio * factorMarca;
           const variacion = ventaAjustada - ventaPromedio;
-
           return {
             articulo,
             ventaReal: ventaPromedio,
             ventaAjustada,
-            variacion,
+            variacion
           };
         });
-
         const subtotal = articulos.reduce((sum, art) => sum + art.ventaAjustada, 0);
-
         return {
           cliente: clienteData.cliente,
           vendedor: clienteData.vendedor,
           empresa: clienteData.empresa,
           articulos,
-          subtotal,
+          subtotal
         };
       });
-
       resultadosMarcas.push({
         marca,
         fechaDestino,
@@ -329,9 +323,8 @@ const Index = () => {
         presupuesto,
         promedioVentaMesesReferencia: promedioVentaMarca,
         porcentajeCambio,
-        distribucionClientes,
+        distribucionClientes
       });
-
       totalPresupuestoGeneral += presupuesto;
       totalPromedioReferenciaGeneral += promedioVentaMarca;
     });
@@ -353,76 +346,61 @@ const Index = () => {
         empresa: mp.empresa,
         presupuesto: mp.presupuesto,
         fecha_destino: mp.fechaDestino,
-        role: (userRole as "administrador" | "gerente" | "admin_ventas") || 'administrador'
+        role: userRole as "administrador" | "gerente" | "admin_ventas" || 'administrador'
       }));
-
-      supabase
-        .from('budgets')
-        .insert(budgetsToInsert)
-        .then(({ error }) => {
-          if (error) {
-            console.error('Error saving budgets:', error);
-          } else {
-            console.log('Budgets saved successfully');
-          }
-        });
+      supabase.from('budgets').insert(budgetsToInsert).then(({
+        error
+      }) => {
+        if (error) {
+          console.error('Error saving budgets:', error);
+        } else {
+          console.log('Budgets saved successfully');
+        }
+      });
     }
-
     const resultadoFinal: CalculationResult = {
       totalPresupuesto: totalPresupuestoGeneral,
       promedioVentaReferencia: totalPromedioReferenciaGeneral / Math.max(resultadosMarcas.length, 1),
       resultadosMarcas,
-      errores,
+      errores
     };
 
     // Mostrar errores si existen
     if (errores.length > 0) {
-      errores.forEach((error) => {
+      errores.forEach(error => {
         toast.error(`Error ${error.tipo}: ${error.mensaje}`);
       });
     }
 
     // Mostrar promedio de ventas de referencia
     const promedioTotal = resultadosMarcas.reduce((sum, r) => sum + r.promedioVentaMesesReferencia, 0);
-    const promedioMensaje = resultadosMarcas.length > 0 
-      ? `Promedio de venta en meses de referencia: $${(promedioTotal / resultadosMarcas.length).toLocaleString("es-ES", {
-          minimumFractionDigits: 2,
-          maximumFractionDigits: 2,
-        })}`
-      : "No se calcularon marcas";
-    
+    const promedioMensaje = resultadosMarcas.length > 0 ? `Promedio de venta en meses de referencia: $${(promedioTotal / resultadosMarcas.length).toLocaleString("es-ES", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    })}` : "No se calcularon marcas";
     toast.info(promedioMensaje);
-
     setResult(resultadoFinal);
   };
-
   if (!session || !user) {
     return null;
   }
-
   const activeRole = simulatedRole || userRole;
-
-  const vendedoresUnicos = Array.from(
-    new Set(
-      result?.resultadosMarcas.flatMap((m) =>
-        m.distribucionClientes.map((c) => c.vendedor)
-      ) || []
-    )
-  );
-
-  const availableRoles = [
-    { value: "administrador", label: "Administrador" },
-    { value: "gerente", label: "Gerente" },
-    { value: "admin_ventas", label: "Admin. Ventas" },
-  ];
-
+  const vendedoresUnicos = Array.from(new Set(result?.resultadosMarcas.flatMap(m => m.distribucionClientes.map(c => c.vendedor)) || []));
+  const availableRoles = [{
+    value: "administrador",
+    label: "Administrador"
+  }, {
+    value: "gerente",
+    label: "Gerente"
+  }, {
+    value: "admin_ventas",
+    label: "Admin. Ventas"
+  }];
   const handleRoleChange = (newRole: string) => {
     setSimulatedRole(newRole);
     toast.info(`Vista cambiada a: ${availableRoles.find(r => r.value === newRole)?.label}`);
   };
-
-  return (
-    <div className="min-h-screen bg-background">
+  return <div className="min-h-screen bg-background">
       <header className="border-b border-border bg-card shadow-sm">
         <div className="container mx-auto px-4 py-6">
           <div className="flex items-center justify-between">
@@ -431,9 +409,7 @@ const Index = () => {
                 <Calculator className="h-6 w-6 text-primary-foreground" />
               </div>
               <div>
-                <h1 className="text-2xl font-bold text-foreground">
-                  Sistema de Cálculo de Presupuestos
-                </h1>
+                <h1 className="text-2xl font-bold text-foreground">Sistema de Cálculo de Presupuestos y Meta</h1>
                 <p className="text-sm text-muted-foreground">
                   Análisis dinámico basado en datos históricos de ventas
                 </p>
@@ -446,32 +422,24 @@ const Index = () => {
                     {user.email}
                   </span>
                   <div className="flex items-center gap-3 mt-1">
-                    {userRole ? (
-                      <>
+                    {userRole ? <>
                         <span className="text-xs font-semibold text-primary bg-primary/10 px-3 py-1 rounded-full border border-primary/20">
                           <Shield className="h-3 w-3 inline mr-1" />
-                          {userRole === "admin_ventas" ? "Admin. Ventas" : 
-                           userRole === "administrador" ? "Administrador" :
-                           userRole === "gerente" ? "Gerente" : userRole}
+                          {userRole === "admin_ventas" ? "Admin. Ventas" : userRole === "administrador" ? "Administrador" : userRole === "gerente" ? "Gerente" : userRole}
                         </span>
                         <Select value={activeRole || undefined} onValueChange={handleRoleChange}>
                           <SelectTrigger className="h-7 w-[140px] text-xs">
                             <SelectValue placeholder="Ver como..." />
                           </SelectTrigger>
                           <SelectContent className="bg-card z-50">
-                            {availableRoles.map((role) => (
-                              <SelectItem key={role.value} value={role.value}>
+                            {availableRoles.map(role => <SelectItem key={role.value} value={role.value}>
                                 {role.label}
-                              </SelectItem>
-                            ))}
+                              </SelectItem>)}
                           </SelectContent>
                         </Select>
-                      </>
-                    ) : (
-                      <span className="text-xs text-muted-foreground bg-muted px-3 py-1 rounded-full">
+                      </> : <span className="text-xs text-muted-foreground bg-muted px-3 py-1 rounded-full">
                         Sin rol asignado
-                      </span>
-                    )}
+                      </span>}
                   </div>
                 </div>
               </div>
@@ -487,23 +455,15 @@ const Index = () => {
       <main className="container mx-auto px-4 py-8">
         <div className="space-y-6">
           <Card className="p-6 shadow-md">
-              <BudgetForm
-                onCalculate={handleCalculate}
-                mockData={{
-                  marcas: MOCK_DATA.marcas,
-                  empresas: MOCK_DATA.empresas,
-                  articulos: MOCK_DATA.articulos,
-                }}
-                mesesDisponibles={mesesDisponibles}
-                onMarcasPresupuestoLoad={setMarcasPresupuesto}
-                historicalBudgets={allHistoricalBudgets}
-                ventasData={MOCK_DATA.ventas}
-              />
+              <BudgetForm onCalculate={handleCalculate} mockData={{
+            marcas: MOCK_DATA.marcas,
+            empresas: MOCK_DATA.empresas,
+            articulos: MOCK_DATA.articulos
+          }} mesesDisponibles={mesesDisponibles} onMarcasPresupuestoLoad={setMarcasPresupuesto} historicalBudgets={allHistoricalBudgets} ventasData={MOCK_DATA.ventas} />
           </Card>
 
           <div>
-            {activeRole === "administrador" ? (
-              <Tabs defaultValue="results" className="space-y-6">
+            {activeRole === "administrador" ? <Tabs defaultValue="results" className="space-y-6">
                 <TabsList className="grid w-full grid-cols-4">
                   <TabsTrigger value="results">Parámetros</TabsTrigger>
                   <TabsTrigger value="vendors" disabled={!result}>Vendedores-Clientes</TabsTrigger>
@@ -515,70 +475,32 @@ const Index = () => {
                 </TabsList>
 
                 <TabsContent value="results" className="space-y-6">
-                  {result && activeRole === "administrador" && vendedoresUnicos.length > 0 && (
-                    <Card className="p-4">
-                      <VendorAdjustment 
-                        vendedores={vendedoresUnicos}
-                        presupuestoTotal={result.totalPresupuesto}
-                        onAdjust={setVendorAdjustments}
-                      />
-                    </Card>
-                  )}
+                  {result && activeRole === "administrador" && vendedoresUnicos.length > 0 && <Card className="p-4">
+                      <VendorAdjustment vendedores={vendedoresUnicos} presupuestoTotal={result.totalPresupuesto} onAdjust={setVendorAdjustments} />
+                    </Card>}
                   
-                  {result && (
-                  <>
+                  {result && <>
                   <div className="grid gap-4 md:grid-cols-4">
-                    <MetricsCard
-                      title="Presupuesto Total"
-                      value={`$${result.totalPresupuesto.toLocaleString("es-ES", {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        })}`}
-                      icon={TrendingUp}
-                      trend="neutral"
-                    />
-                    <MetricsCard
-                      title="Marcas Calculadas"
-                      value={result.resultadosMarcas.length.toString()}
-                      icon={Calculator}
-                      trend="positive"
-                      subtitle="Con presupuesto"
-                    />
-                    <MetricsCard
-                      title="Promedio General"
-                      value={`$${result.promedioVentaReferencia.toLocaleString("es-ES", {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2,
-                      })}`}
-                      icon={Calendar}
-                      trend="neutral"
-                      subtitle="Meses referencia"
-                    />
-                    <MetricsCard
-                      title="Errores"
-                      value={result.errores.length.toString()}
-                      icon={Users}
-                      trend={result.errores.length > 0 ? "negative" : "positive"}
-                      subtitle="Marcas con error"
-                    />
+                    <MetricsCard title="Presupuesto Total" value={`$${result.totalPresupuesto.toLocaleString("es-ES", {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2
+                  })}`} icon={TrendingUp} trend="neutral" />
+                    <MetricsCard title="Marcas Calculadas" value={result.resultadosMarcas.length.toString()} icon={Calculator} trend="positive" subtitle="Con presupuesto" />
+                    <MetricsCard title="Promedio General" value={`$${result.promedioVentaReferencia.toLocaleString("es-ES", {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2
+                  })}`} icon={Calendar} trend="neutral" subtitle="Meses referencia" />
+                    <MetricsCard title="Errores" value={result.errores.length.toString()} icon={Users} trend={result.errores.length > 0 ? "negative" : "positive"} subtitle="Marcas con error" />
                   </div>
 
                   <BudgetResults result={result} />
                   <FormulaExplanation />
-                  </>
-                  )}
+                  </>}
                 </TabsContent>
 
-                {result && (activeRole === "administrador" || activeRole === "admin_ventas") && (
-                  <TabsContent value="vendors">
-                    <VendorClientTable 
-                      result={result}
-                      vendorAdjustments={vendorAdjustments}
-                      presupuestoTotal={result.totalPresupuesto}
-                      userRole={activeRole}
-                    />
-                  </TabsContent>
-                )}
+                {result && (activeRole === "administrador" || activeRole === "admin_ventas") && <TabsContent value="vendors">
+                    <VendorClientTable result={result} vendorAdjustments={vendorAdjustments} presupuestoTotal={result.totalPresupuesto} userRole={activeRole} />
+                  </TabsContent>}
 
                 <TabsContent value="import">
                   <DataImport />
@@ -587,88 +509,43 @@ const Index = () => {
                 <TabsContent value="roles">
                   <RoleManagement />
                 </TabsContent>
-              </Tabs>
-            ) : (
-              <Tabs defaultValue="results" className="space-y-6">
-                <TabsList className={`grid w-full ${(activeRole === "gerente" || activeRole === "admin_ventas") ? "grid-cols-2" : "grid-cols-1"}`}>
+              </Tabs> : <Tabs defaultValue="results" className="space-y-6">
+                <TabsList className={`grid w-full ${activeRole === "gerente" || activeRole === "admin_ventas" ? "grid-cols-2" : "grid-cols-1"}`}>
                   <TabsTrigger value="results">Parámetros</TabsTrigger>
-                  {(activeRole === "gerente" || activeRole === "admin_ventas") && (
-                    <TabsTrigger value="vendors">Vendedores-Clientes</TabsTrigger>
-                  )}
+                  {(activeRole === "gerente" || activeRole === "admin_ventas") && <TabsTrigger value="vendors">Vendedores-Clientes</TabsTrigger>}
                 </TabsList>
 
                 <TabsContent value="results" className="space-y-6">
-                  {result && (activeRole === "administrador" || activeRole === "gerente" || activeRole === "admin_ventas") && vendedoresUnicos.length > 0 && (
-                    <Card className="p-4">
-                      <VendorAdjustment 
-                        vendedores={vendedoresUnicos}
-                        presupuestoTotal={result.totalPresupuesto}
-                        onAdjust={setVendorAdjustments}
-                      />
-                    </Card>
-                  )}
+                  {result && (activeRole === "administrador" || activeRole === "gerente" || activeRole === "admin_ventas") && vendedoresUnicos.length > 0 && <Card className="p-4">
+                      <VendorAdjustment vendedores={vendedoresUnicos} presupuestoTotal={result.totalPresupuesto} onAdjust={setVendorAdjustments} />
+                    </Card>}
                   
-                  {result && (
-                  <>
+                  {result && <>
                   <div className="grid gap-4 md:grid-cols-4">
-                    <MetricsCard
-                      title="Presupuesto Total"
-                      value={`$${result.totalPresupuesto.toLocaleString("es-ES", {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        })}`}
-                      icon={TrendingUp}
-                      trend="neutral"
-                    />
-                    <MetricsCard
-                      title="Marcas Calculadas"
-                      value={result.resultadosMarcas.length.toString()}
-                      icon={Calculator}
-                      trend="positive"
-                      subtitle="Con presupuesto"
-                    />
-                    <MetricsCard
-                      title="Promedio General"
-                      value={`$${result.promedioVentaReferencia.toLocaleString("es-ES", {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2,
-                      })}`}
-                      icon={Calendar}
-                      trend="neutral"
-                      subtitle="Meses referencia"
-                    />
-                    <MetricsCard
-                      title="Errores"
-                      value={result.errores.length.toString()}
-                      icon={Users}
-                      trend={result.errores.length > 0 ? "negative" : "positive"}
-                      subtitle="Marcas con error"
-                    />
+                    <MetricsCard title="Presupuesto Total" value={`$${result.totalPresupuesto.toLocaleString("es-ES", {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2
+                  })}`} icon={TrendingUp} trend="neutral" />
+                    <MetricsCard title="Marcas Calculadas" value={result.resultadosMarcas.length.toString()} icon={Calculator} trend="positive" subtitle="Con presupuesto" />
+                    <MetricsCard title="Promedio General" value={`$${result.promedioVentaReferencia.toLocaleString("es-ES", {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2
+                  })}`} icon={Calendar} trend="neutral" subtitle="Meses referencia" />
+                    <MetricsCard title="Errores" value={result.errores.length.toString()} icon={Users} trend={result.errores.length > 0 ? "negative" : "positive"} subtitle="Marcas con error" />
                   </div>
 
                   <BudgetResults result={result} />
                   <FormulaExplanation />
-                  </>
-                  )}
+                  </>}
                 </TabsContent>
 
-                {result && (activeRole === "gerente" || activeRole === "admin_ventas") && (
-                  <TabsContent value="vendors">
-                    <VendorClientTable 
-                      result={result}
-                      vendorAdjustments={vendorAdjustments}
-                      presupuestoTotal={result.totalPresupuesto}
-                      userRole={activeRole}
-                    />
-                  </TabsContent>
-                )}
-              </Tabs>
-            )}
+                {result && (activeRole === "gerente" || activeRole === "admin_ventas") && <TabsContent value="vendors">
+                    <VendorClientTable result={result} vendorAdjustments={vendorAdjustments} presupuestoTotal={result.totalPresupuesto} userRole={activeRole} />
+                  </TabsContent>}
+              </Tabs>}
           </div>
         </div>
       </main>
-    </div>
-  );
+    </div>;
 };
-
 export default Index;
