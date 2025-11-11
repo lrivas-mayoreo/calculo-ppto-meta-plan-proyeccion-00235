@@ -56,18 +56,18 @@ export const VendorClientTable = ({ result, vendorAdjustments, presupuestoTotal,
   }, [result, vendorAdjustments, previousMonthSales, brandAdjustments]);
 
   const getPreviousMonth = (fechaDestino: string): string => {
-    // Parse fecha in format YYYY/MM/DD
+    // Parse fecha in format YYYY/MM/DD and return the full previous month range
     const parts = fechaDestino.split('/');
     const year = parseInt(parts[0]);
     const month = parseInt(parts[1]);
-    const day = parseInt(parts[2]);
     
-    const date = new Date(year, month - 1, day);
+    const date = new Date(year, month - 1, 1);
     date.setMonth(date.getMonth() - 1);
     
     const prevYear = date.getFullYear();
     const prevMonth = String(date.getMonth() + 1).padStart(2, '0');
     
+    // Return format YYYY/MM for querying all sales in that month
     return `${prevYear}/${prevMonth}`;
   };
 

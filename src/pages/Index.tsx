@@ -519,16 +519,48 @@ const Index = () => {
                   
                   {result && <>
                   <div className="grid gap-4 md:grid-cols-4">
-                    <MetricsCard title="Presupuesto Total" value={`$${result.totalPresupuesto.toLocaleString("es-ES", {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2
-                  })}`} icon={TrendingUp} trend="neutral" />
-                    <MetricsCard title="Marcas Calculadas" value={result.resultadosMarcas.length.toString()} icon={Calculator} trend="positive" subtitle="Con presupuesto" />
-                    <MetricsCard title="Promedio General" value={`$${result.promedioVentaReferencia.toLocaleString("es-ES", {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2
-                  })}`} icon={Calendar} trend="neutral" subtitle="Meses referencia" />
-                    <MetricsCard title="Errores" value={result.errores.length.toString()} icon={Users} trend={result.errores.length > 0 ? "negative" : "positive"} subtitle="Marcas con error" />
+                    <MetricsCard 
+                      title="Presupuesto Base" 
+                      value={`$${result.totalPresupuesto.toLocaleString("es-ES", {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2
+                      })}`} 
+                      icon={TrendingUp} 
+                      trend="neutral" 
+                    />
+                    <MetricsCard 
+                      title="Ppto Asociado" 
+                      value={`$${result.resultadosMarcas.reduce((sum, m) => 
+                        sum + m.distribucionClientes.reduce((s, c) => s + c.subtotal, 0), 0
+                      ).toLocaleString("es-ES", {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2
+                      })}`} 
+                      icon={Calculator} 
+                      trend="positive" 
+                      subtitle="Suma vendedores-clientes" 
+                    />
+                    <MetricsCard 
+                      title="Venta Real" 
+                      value={`$${result.resultadosMarcas.reduce((sum, m) => 
+                        sum + m.distribucionClientes.reduce((s, c) => 
+                          s + c.articulos.reduce((a, art) => a + art.ventaReal, 0), 0
+                        ), 0
+                      ).toLocaleString("es-ES", {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2
+                      })}`} 
+                      icon={Calendar} 
+                      trend="neutral" 
+                      subtitle="Meses referencia" 
+                    />
+                    <MetricsCard 
+                      title="Errores" 
+                      value={result.errores.length.toString()} 
+                      icon={Users} 
+                      trend={result.errores.length > 0 ? "negative" : "positive"} 
+                      subtitle="Marcas con error" 
+                    />
                   </div>
 
                   <BudgetResults result={result} />
@@ -575,16 +607,48 @@ const Index = () => {
                   
                   {result && <>
                   <div className="grid gap-4 md:grid-cols-4">
-                    <MetricsCard title="Presupuesto Total" value={`$${result.totalPresupuesto.toLocaleString("es-ES", {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2
-                  })}`} icon={TrendingUp} trend="neutral" />
-                    <MetricsCard title="Marcas Calculadas" value={result.resultadosMarcas.length.toString()} icon={Calculator} trend="positive" subtitle="Con presupuesto" />
-                    <MetricsCard title="Promedio General" value={`$${result.promedioVentaReferencia.toLocaleString("es-ES", {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2
-                  })}`} icon={Calendar} trend="neutral" subtitle="Meses referencia" />
-                    <MetricsCard title="Errores" value={result.errores.length.toString()} icon={Users} trend={result.errores.length > 0 ? "negative" : "positive"} subtitle="Marcas con error" />
+                    <MetricsCard 
+                      title="Presupuesto Base" 
+                      value={`$${result.totalPresupuesto.toLocaleString("es-ES", {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2
+                      })}`} 
+                      icon={TrendingUp} 
+                      trend="neutral" 
+                    />
+                    <MetricsCard 
+                      title="Ppto Asociado" 
+                      value={`$${result.resultadosMarcas.reduce((sum, m) => 
+                        sum + m.distribucionClientes.reduce((s, c) => s + c.subtotal, 0), 0
+                      ).toLocaleString("es-ES", {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2
+                      })}`} 
+                      icon={Calculator} 
+                      trend="positive" 
+                      subtitle="Suma vendedores-clientes" 
+                    />
+                    <MetricsCard 
+                      title="Venta Real" 
+                      value={`$${result.resultadosMarcas.reduce((sum, m) => 
+                        sum + m.distribucionClientes.reduce((s, c) => 
+                          s + c.articulos.reduce((a, art) => a + art.ventaReal, 0), 0
+                        ), 0
+                      ).toLocaleString("es-ES", {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2
+                      })}`} 
+                      icon={Calendar} 
+                      trend="neutral" 
+                      subtitle="Meses referencia" 
+                    />
+                    <MetricsCard 
+                      title="Errores" 
+                      value={result.errores.length.toString()} 
+                      icon={Users} 
+                      trend={result.errores.length > 0 ? "negative" : "positive"} 
+                      subtitle="Marcas con error" 
+                    />
                   </div>
 
                   <BudgetResults result={result} />
