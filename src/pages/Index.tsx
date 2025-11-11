@@ -495,13 +495,13 @@ const Index = () => {
 
           <div>
             {activeRole === "administrador" ? <Tabs defaultValue="results" className="space-y-6">
-                <TabsList className="grid w-full grid-cols-4">
-                  <TabsTrigger value="results">Parámetros</TabsTrigger>
-                  <TabsTrigger value="vendors" disabled={!result}>Vendedores-Clientes</TabsTrigger>
-                  <TabsTrigger value="import">Importar Datos</TabsTrigger>
-                  <TabsTrigger value="roles">
-                    <Shield className="h-4 w-4 mr-2" />
-                    Gestión Usuarios
+                <TabsList className="grid w-full grid-cols-4 h-auto">
+                  <TabsTrigger value="results" className="text-sm">Parámetros</TabsTrigger>
+                  <TabsTrigger value="vendors" disabled={!result} className="text-sm">Vendedores-Clientes</TabsTrigger>
+                  <TabsTrigger value="import" className="text-sm">Importar Datos</TabsTrigger>
+                  <TabsTrigger value="roles" className="text-sm flex items-center gap-1">
+                    <Shield className="h-3.5 w-3.5" />
+                    <span>Usuarios</span>
                   </TabsTrigger>
                 </TabsList>
 
