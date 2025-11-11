@@ -53,7 +53,7 @@ export const VendorClientTable = ({ result, vendorAdjustments, presupuestoTotal,
 
   useEffect(() => {
     calculateVendorClientData();
-  }, [result, vendorAdjustments, previousMonthSales, brandAdjustments]);
+  }, [result, previousMonthSales, brandAdjustments]);
 
   const getPreviousMonth = (fechaDestino: string): string => {
     // Parse fecha in format YYYY/MM/DD and return the full previous month range
@@ -149,44 +149,21 @@ export const VendorClientTable = ({ result, vendorAdjustments, presupuestoTotal,
 
     result.resultadosMarcas.forEach((marca) => {
       const totalBrandAdjustment = brandAdjustments[marca.marca] || 0;
-      const brandItems = marca.distribucionClientes;
-      const totalBrandBudget = brandItems.reduce((sum, cliente) => {
-        let vendorBudget = presupuestoTotal / getUniqueVendors().length;
-        
-        if (vendorAdjustments[cliente.vendedor]) {
-          const adj = vendorAdjustments[cliente.vendedor];
-          if (adj.type === "percentage") {
-            vendorBudget = (presupuestoTotal * adj.value) / 100;
-          } else {
-            vendorBudget = adj.value;
-          }
-        }
-
-        const clientShare = cliente.subtotal / marca.presupuesto;
-        return sum + (vendorBudget * clientShare);
-      }, 0);
+      
+      // Calculate total brand budget (sum of all subtotals for this brand)
+      const totalBrandBudget = marca.distribucionClientes.reduce((sum, cliente) => 
+        sum + cliente.subtotal, 0
+      );
 
       marca.distribucionClientes.forEach((cliente) => {
         const key = `${cliente.vendedor}-${cliente.cliente}-${marca.marca}`;
         
-        // Calculate vendor's budget based on adjustments
-        let vendorBudget = presupuestoTotal / getUniqueVendors().length;
-        
-        if (vendorAdjustments[cliente.vendedor]) {
-          const adj = vendorAdjustments[cliente.vendedor];
-          if (adj.type === "percentage") {
-            vendorBudget = (presupuestoTotal * adj.value) / 100;
-          } else {
-            vendorBudget = adj.value;
-          }
-        }
-
-        // Calculate client's share of vendor's budget
-        const clientShare = cliente.subtotal / marca.presupuesto;
-        const presupuestoAsignado = vendorBudget * clientShare;
+        // Use the already calculated subtotal as presupuestoAsignado (Ppto Asociado)
+        // This comes from the formula: Venta Promedio del Artículo × Factor
+        const presupuestoAsignado = cliente.subtotal;
 
         // Calculate proportional brand adjustment
-        const itemProportion = presupuestoAsignado / totalBrandBudget;
+        const itemProportion = totalBrandBudget > 0 ? presupuestoAsignado / totalBrandBudget : 0;
         const ajusteMarca = totalBrandAdjustment * itemProportion;
 
         data.push({
