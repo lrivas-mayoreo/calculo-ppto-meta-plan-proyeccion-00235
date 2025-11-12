@@ -119,32 +119,36 @@ export const DataImport = () => {
     // Validar columnas
     const validation = validateExcel(data, type);
     
-    // Detectar duplicados en el archivo
+    // Detectar duplicados de código en el archivo (solo códigos, nombre puede repetirse)
     const codigosInFile = new Set<string>();
     let duplicatesInFile = 0;
     let invalidRows = 0;
 
     for (const item of data) {
-      const codigo = String(item.codigo || item.codigo_cliente || "").trim();
+      // Para ventas, validar campos requeridos
+      if (type === "ventas") {
+        if (!item.codigo_cliente || !item.codigo_marca || !item.mes || item.monto === undefined) {
+          invalidRows++;
+          continue;
+        }
+        // Para ventas no contamos duplicados de código
+        continue;
+      }
       
-      // Validar que los campos requeridos no estén vacíos
+      // Para clientes, marcas, vendedores
+      const codigo = String(item.codigo || "").trim();
+      
       if (!codigo) {
         invalidRows++;
         continue;
       }
 
-      if (type === "ventas") {
-        if (!item.codigo_cliente || !item.codigo_marca || !item.mes || !item.monto) {
-          invalidRows++;
-          continue;
-        }
-      } else {
-        if (!item.nombre) {
-          invalidRows++;
-          continue;
-        }
+      if (!item.nombre) {
+        invalidRows++;
+        continue;
       }
 
+      // Contar duplicados de código en el archivo (nombre puede repetirse)
       if (codigosInFile.has(codigo)) {
         duplicatesInFile++;
       } else {
@@ -152,27 +156,12 @@ export const DataImport = () => {
       }
     }
 
-    // Detectar duplicados en la base de datos
+    // Los duplicados en BD se manejarán con upsert, solo informamos
     let duplicatesInDB = 0;
     const tableName = type === "ventas" ? "ventas_reales" : type;
     
-    if (type === "ventas") {
-      // Para ventas, verificar solo una muestra pequeña
-      const sampleSize = Math.min(50, data.length);
-      for (let i = 0; i < sampleSize; i++) {
-        const item = data[i];
-        const result = await supabase
-          .from(tableName as "ventas_reales")
-          .select("*", { count: "exact", head: true })
-          .eq("user_id", user.id)
-          .eq("codigo_cliente", String(item.codigo_cliente || "").trim())
-          .eq("codigo_marca", String(item.codigo_marca || "").trim())
-          .eq("mes", String(item.mes || "").trim());
-        
-        if (result.count && result.count > 0) duplicatesInDB++;
-      }
-    } else {
-      // Para otros tipos, verificar códigos únicos (muestra)
+    if (type !== "ventas" && codigosInFile.size > 0) {
+      // Verificar una muestra de códigos
       const sampleCodes = Array.from(codigosInFile).slice(0, 50);
       
       for (const codigo of sampleCodes) {
@@ -266,6 +255,10 @@ export const DataImport = () => {
       return;
     }
 
+    if (diagnostic?.hasWarnings && diagnostic.duplicatesInDB > 0) {
+      toast.info("Se detectaron registros existentes. Se actualizarán automáticamente.");
+    }
+
     setUploading(true);
     setUploadProgress(0);
     setCurrentBatch(0);
@@ -331,7 +324,20 @@ export const DataImport = () => {
         setCurrentBatch(i + 1);
         const batch = batches[i];
 
-        const result = await supabase.from(tableName).insert(batch);
+        // Usar upsert para insertar o actualizar registros existentes
+        let result;
+        if (type === "ventas") {
+          // Para ventas no hay constraint único simple, usar insert directo
+          result = await supabase.from(tableName).insert(batch);
+        } else {
+          // Para clientes, marcas, vendedores: upsert basado en user_id + codigo
+          result = await supabase
+            .from(tableName)
+            .upsert(batch, { 
+              onConflict: 'user_id,codigo',
+              ignoreDuplicates: false 
+            });
+        }
 
         if (result.error) {
           console.error(`Error en lote ${i + 1}:`, result.error);
@@ -426,7 +432,7 @@ export const DataImport = () => {
                         <p className="text-yellow-600"><strong>⚠️ Duplicados en el archivo:</strong> {diagnostics.clientes.duplicatesInFile}</p>
                       )}
                       {diagnostics.clientes.duplicatesInDB > 0 && (
-                        <p className="text-yellow-600"><strong>⚠️ Códigos que ya existen en la BD:</strong> {diagnostics.clientes.duplicatesInDB} (primeros 100 verificados)</p>
+                        <p className="text-blue-600"><strong>ℹ️ Códigos que ya existen en la BD:</strong> {diagnostics.clientes.duplicatesInDB} (se actualizarán)</p>
                       )}
                       {diagnostics.clientes.missingColumns.length > 0 && (
                         <p className="text-destructive"><strong>❌ Columnas faltantes:</strong> {diagnostics.clientes.missingColumns.join(", ")}</p>
@@ -507,7 +513,7 @@ export const DataImport = () => {
                         <p className="text-yellow-600"><strong>⚠️ Duplicados en el archivo:</strong> {diagnostics.marcas.duplicatesInFile}</p>
                       )}
                       {diagnostics.marcas.duplicatesInDB > 0 && (
-                        <p className="text-yellow-600"><strong>⚠️ Códigos que ya existen en la BD:</strong> {diagnostics.marcas.duplicatesInDB}</p>
+                        <p className="text-blue-600"><strong>ℹ️ Códigos que ya existen en la BD:</strong> {diagnostics.marcas.duplicatesInDB} (se actualizarán)</p>
                       )}
                       {!diagnostics.marcas.hasErrors && !diagnostics.marcas.hasWarnings && (
                         <p className="text-green-600 flex items-center gap-2"><CheckCircle className="h-4 w-4" /> Archivo válido</p>
@@ -582,7 +588,7 @@ export const DataImport = () => {
                         <p className="text-yellow-600"><strong>⚠️ Duplicados en el archivo:</strong> {diagnostics.vendedores.duplicatesInFile}</p>
                       )}
                       {diagnostics.vendedores.duplicatesInDB > 0 && (
-                        <p className="text-yellow-600"><strong>⚠️ Códigos que ya existen en la BD:</strong> {diagnostics.vendedores.duplicatesInDB}</p>
+                        <p className="text-blue-600"><strong>ℹ️ Códigos que ya existen en la BD:</strong> {diagnostics.vendedores.duplicatesInDB} (se actualizarán)</p>
                       )}
                       {!diagnostics.vendedores.hasErrors && !diagnostics.vendedores.hasWarnings && (
                         <p className="text-green-600 flex items-center gap-2"><CheckCircle className="h-4 w-4" /> Archivo válido</p>
@@ -655,7 +661,7 @@ export const DataImport = () => {
                         <p className="text-destructive"><strong>⚠️ Filas inválidas:</strong> {diagnostics.ventas.invalidRows}</p>
                       )}
                       {diagnostics.ventas.duplicatesInDB > 0 && (
-                        <p className="text-yellow-600"><strong>⚠️ Registros duplicados en BD:</strong> {diagnostics.ventas.duplicatesInDB} (primeros 100 verificados)</p>
+                        <p className="text-blue-600"><strong>ℹ️ Registros existentes en BD:</strong> {diagnostics.ventas.duplicatesInDB} (se agregarán como nuevos)</p>
                       )}
                       {!diagnostics.ventas.hasErrors && !diagnostics.ventas.hasWarnings && (
                         <p className="text-green-600 flex items-center gap-2"><CheckCircle className="h-4 w-4" /> Archivo válido</p>
