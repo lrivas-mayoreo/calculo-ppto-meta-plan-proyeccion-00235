@@ -2,8 +2,8 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Calculator, Upload, X, Download, Eye, Info, Settings } from "lucide-react";
+// import { Checkbox } from "@/components/ui/checkbox"; // ya no se usa
+import { Calculator, Upload, X, Download, Eye, Info, Settings, Check } from "lucide-react";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
 import type { MarcaPresupuesto } from "@/pages/Index";
@@ -14,10 +14,7 @@ import { parseDateFromExcel, formatDateToYYYYMMDD, detectDateFormat } from "@/li
 import { SuggestedBudget } from "@/components/SuggestedBudget";
 
 interface BudgetFormProps {
-  onCalculate: (
-    marcasPresupuesto: MarcaPresupuesto[],
-    mesesReferencia: string[]
-  ) => void;
+  onCalculate: (marcasPresupuesto: MarcaPresupuesto[], mesesReferencia: string[]) => void;
   mockData: {
     marcas: string[];
     empresas: string[];
@@ -40,19 +37,29 @@ interface BudgetFormProps {
   presupuestoTotal?: number;
 }
 
-export const BudgetForm = ({ onCalculate, mockData, mesesDisponibles, onMarcasPresupuestoLoad, historicalBudgets = [], ventasData, vendorAdjustments = {}, brandAdjustments = {}, presupuestoTotal = 0 }: BudgetFormProps) => {
+export const BudgetForm = ({
+  onCalculate,
+  mockData,
+  mesesDisponibles,
+  onMarcasPresupuestoLoad,
+  historicalBudgets = [],
+  ventasData,
+  vendorAdjustments = {},
+  brandAdjustments = {},
+  presupuestoTotal = 0,
+}: BudgetFormProps) => {
   const [mesesReferencia, setMesesReferencia] = useState<string[]>([]);
   const [marcasPresupuesto, setMarcasPresupuesto] = useState<MarcaPresupuesto[]>([]);
-  const [marcasConError, setMarcasConError] = useState<Array<{ marca: string; fechaDestino: string; empresa: string; presupuesto: number; error: string }>>([]);
+  const [marcasConError, setMarcasConError] = useState<
+    Array<{ marca: string; fechaDestino: string; empresa: string; presupuesto: number; error: string }>
+  >([]);
   const [excelFileName, setExcelFileName] = useState("");
   const [showMarcasCargadas, setShowMarcasCargadas] = useState(false);
   const [showMarcasError, setShowMarcasError] = useState(false);
   const [dateFormatPreview, setDateFormatPreview] = useState<string>("");
 
   const handleMesToggle = (mesAnio: string) => {
-    setMesesReferencia((prev) =>
-      prev.includes(mesAnio) ? prev.filter((m) => m !== mesAnio) : [...prev, mesAnio]
-    );
+    setMesesReferencia((prev) => (prev.includes(mesAnio) ? prev.filter((m) => m !== mesAnio) : [...prev, mesAnio]));
   };
 
   const handleExcelUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -108,15 +115,21 @@ export const BudgetForm = ({ onCalculate, mockData, mesesDisponibles, onMarcasPr
 
         // Parsear datos y validar formato de fecha
         const marcasFromExcel: MarcaPresupuesto[] = [];
-        const errores: Array<{ marca: string; fechaDestino: string; empresa: string; presupuesto: number; error: string }> = [];
+        const errores: Array<{
+          marca: string;
+          fechaDestino: string;
+          empresa: string;
+          presupuesto: number;
+          error: string;
+        }> = [];
         let detectedFormat = "";
-        
+
         jsonData.forEach((row, index) => {
           const marca = row.Marca || row.marca;
           const fechaRaw = (row.Fecha || row.fecha)?.toString().trim() || "";
           const empresa = row.Empresa || row.empresa;
           const presupuesto = parseFloat(row.Presupuesto || row.presupuesto);
-          
+
           // Detect date format from first valid row
           if (index === 0 && fechaRaw) {
             detectedFormat = detectDateFormat(fechaRaw);
@@ -126,45 +139,45 @@ export const BudgetForm = ({ onCalculate, mockData, mesesDisponibles, onMarcasPr
           // Parse date dynamically
           const parsedDate = parseDateFromExcel(fechaRaw);
           const fechaDestino = parsedDate ? formatDateToYYYYMMDD(parsedDate) : "";
-          
+
           // Validar que todos los campos estén presentes
           if (!marca || !fechaDestino || !empresa || isNaN(presupuesto)) {
             if (marca) {
-              errores.push({ 
-                marca, 
+              errores.push({
+                marca,
                 fechaDestino: fechaRaw || "Sin fecha",
                 empresa: empresa || "Sin empresa",
                 presupuesto: presupuesto || 0,
-                error: fechaDestino ? "Datos incompletos" : "Formato de fecha inválido"
+                error: fechaDestino ? "Datos incompletos" : "Formato de fecha inválido",
               });
             }
             return;
           }
-          
+
           // Validar que la marca exista en el maestro
           if (!mockData.marcas.includes(marca)) {
-            errores.push({ 
-              marca, 
+            errores.push({
+              marca,
               fechaDestino,
               empresa,
               presupuesto,
-              error: "Marca no existe en el maestro"
+              error: "Marca no existe en el maestro",
             });
             return;
           }
 
           // Validar que la empresa exista en el maestro
           if (!mockData.empresas.includes(empresa)) {
-            errores.push({ 
-              marca, 
+            errores.push({
+              marca,
               fechaDestino,
               empresa,
               presupuesto,
-              error: `Empresa "${empresa}" no existe`
+              error: `Empresa "${empresa}" no existe`,
             });
             return;
           }
-          
+
           marcasFromExcel.push({
             marca,
             fechaDestino,
@@ -185,15 +198,13 @@ export const BudgetForm = ({ onCalculate, mockData, mesesDisponibles, onMarcasPr
 
         setMarcasPresupuesto(marcasFromExcel);
         onMarcasPresupuestoLoad(marcasFromExcel);
-        
+
         if (errores.length > 0) {
           toast.warning(
-            `Archivo cargado con ${marcasFromExcel.length} marca(s) válida(s) y ${errores.length} error(es)`
+            `Archivo cargado con ${marcasFromExcel.length} marca(s) válida(s) y ${errores.length} error(es)`,
           );
         } else {
-          toast.success(
-            `${marcasFromExcel.length} marcas cargadas (Formato: ${detectedFormat})`
-          );
+          toast.success(`${marcasFromExcel.length} marcas cargadas (Formato: ${detectedFormat})`);
         }
       } catch (error) {
         toast.error("Error al procesar el archivo Excel");
@@ -258,9 +269,7 @@ export const BudgetForm = ({ onCalculate, mockData, mesesDisponibles, onMarcasPr
 
     try {
       onCalculate(marcasPresupuesto, mesesReferencia);
-      toast.success(
-        `Cálculo realizado exitosamente para ${marcasPresupuesto.length} marca(s)`
-      );
+      toast.success(`Cálculo realizado exitosamente para ${marcasPresupuesto.length} marca(s)`);
     } catch (error) {
       toast.error((error as Error).message);
     }
@@ -287,12 +296,7 @@ export const BudgetForm = ({ onCalculate, mockData, mesesDisponibles, onMarcasPr
                 onMarcasPresupuestoLoad(marcas);
               }}
             />
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={handleDownloadTemplate}
-            >
+            <Button type="button" variant="outline" size="sm" onClick={handleDownloadTemplate}>
               <Download className="mr-2 h-4 w-4" />
               Descargar Template
             </Button>
@@ -332,24 +336,18 @@ export const BudgetForm = ({ onCalculate, mockData, mesesDisponibles, onMarcasPr
               >
                 <Eye className="h-4 w-4" />
               </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                onClick={handleRemoveExcel}
-                className="h-8 w-8"
-              >
+              <Button type="button" variant="ghost" size="icon" onClick={handleRemoveExcel} className="h-8 w-8">
                 <X className="h-4 w-4" />
               </Button>
             </div>
-            
+
             {marcasConError.length > 0 && (
               <Collapsible open={showMarcasError} onOpenChange={setShowMarcasError}>
                 <CollapsibleContent>
                   <div className="rounded-md border border-destructive bg-destructive/10">
                     <Table>
                       <TableHeader>
-                       <TableRow>
+                        <TableRow>
                           <TableHead>Marca</TableHead>
                           <TableHead>Fecha</TableHead>
                           <TableHead>Empresa</TableHead>
@@ -364,7 +362,8 @@ export const BudgetForm = ({ onCalculate, mockData, mesesDisponibles, onMarcasPr
                             <TableCell>{item.fechaDestino}</TableCell>
                             <TableCell>{item.empresa}</TableCell>
                             <TableCell className="text-right">
-                              ${item.presupuesto.toLocaleString("es-ES", {
+                              $
+                              {item.presupuesto.toLocaleString("es-ES", {
                                 minimumFractionDigits: 2,
                                 maximumFractionDigits: 2,
                               })}
@@ -378,7 +377,7 @@ export const BudgetForm = ({ onCalculate, mockData, mesesDisponibles, onMarcasPr
                 </CollapsibleContent>
               </Collapsible>
             )}
-            
+
             <Collapsible open={showMarcasCargadas} onOpenChange={setShowMarcasCargadas}>
               <CollapsibleContent>
                 <div className="rounded-md border border-border">
@@ -398,7 +397,8 @@ export const BudgetForm = ({ onCalculate, mockData, mesesDisponibles, onMarcasPr
                           <TableCell>{item.fechaDestino}</TableCell>
                           <TableCell>{item.empresa}</TableCell>
                           <TableCell className="text-right">
-                            ${item.presupuesto.toLocaleString("es-ES", {
+                            $
+                            {item.presupuesto.toLocaleString("es-ES", {
                               minimumFractionDigits: 2,
                               maximumFractionDigits: 2,
                             })}
@@ -439,30 +439,42 @@ export const BudgetForm = ({ onCalculate, mockData, mesesDisponibles, onMarcasPr
         </div>
       )}
 
+      {/* === Meses de Referencia (tiles) === */}
       <div className="space-y-3">
-        <Label>Meses de Referencia (Mes-Año) *</Label>
+        <div className="flex items-center justify-between">
+          <Label>Meses de Referencia (Mes-Año) *</Label>
+          {mesesReferencia.length > 0 && (
+            <Button type="button" variant="ghost" size="sm" onClick={() => setMesesReferencia([])}>
+              Limpiar
+            </Button>
+          )}
+        </div>
+
         <div className="max-h-64 overflow-y-auto rounded-md border border-border bg-muted/30 p-4">
-          <div className="grid grid-cols-2 gap-3">
-            {mesesDisponibles.map((mesAnio) => (
-              <div key={mesAnio} className="flex items-center space-x-2">
-                <Checkbox
-                  id={`mes-${mesAnio}`}
-                  checked={mesesReferencia.includes(mesAnio)}
-                  onCheckedChange={() => handleMesToggle(mesAnio)}
-                />
-                <label
-                  htmlFor={`mes-${mesAnio}`}
-                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+            {mesesDisponibles.map((mesAnio) => {
+              const selected = mesesReferencia.includes(mesAnio);
+              return (
+                <button
+                  key={mesAnio}
+                  type="button"
+                  onClick={() => handleMesToggle(mesAnio)}
+                  aria-pressed={selected}
+                  className={[
+                    "relative w-full rounded-xl border px-3 py-2 text-sm font-medium text-left transition",
+                    "focus:outline-none focus:ring-2 focus:ring-offset-2",
+                    selected ? "border-blue-600 bg-blue-50 ring-blue-600" : "border-gray-300 hover:border-gray-400",
+                  ].join(" ")}
                 >
-                  {mesAnio}
-                </label>
-              </div>
-            ))}
+                  <span className="block truncate pr-6">{mesAnio}</span>
+                  {selected && <Check className="absolute top-2 right-2 h-4 w-4" />}
+                </button>
+              );
+            })}
           </div>
         </div>
-        <p className="text-xs text-muted-foreground">
-          Seleccionados: {mesesReferencia.length} mes(es)
-        </p>
+
+        <p className="text-xs text-muted-foreground">Seleccionados: {mesesReferencia.length} mes(es)</p>
       </div>
 
       <Button type="submit" className="w-full">
@@ -492,15 +504,13 @@ export const BudgetForm = ({ onCalculate, mockData, mesesDisponibles, onMarcasPr
                   </TableHeader>
                   <TableBody>
                     {Object.entries(vendorAdjustments).map(([vendor, adj]) => {
-                      const budget = adj.type === "percentage" 
-                        ? (presupuestoTotal * adj.value) / 100 
-                        : adj.value;
+                      const budget = adj.type === "percentage" ? (presupuestoTotal * adj.value) / 100 : adj.value;
                       return (
                         <TableRow key={vendor}>
                           <TableCell className="font-medium">{vendor}</TableCell>
                           <TableCell className="text-right">
-                            {adj.type === "percentage" 
-                              ? `${adj.value.toFixed(2)}%` 
+                            {adj.type === "percentage"
+                              ? `${adj.value.toFixed(2)}%`
                               : `$${adj.value.toLocaleString("es-ES", { minimumFractionDigits: 2 })}`}
                           </TableCell>
                           <TableCell className="text-right">
