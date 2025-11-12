@@ -228,6 +228,8 @@ export const DataImport = () => {
       formData.append('file', blob, `${type}.xlsx`);
       formData.append('type', type);
 
+      setUploadProgress(20);
+
       const response = await supabase.functions.invoke('bulk-import', {
         body: formData,
       });
@@ -238,24 +240,69 @@ export const DataImport = () => {
 
       const result = response.data;
 
-      if (result.errorCount > 0) {
-        toast.warning(`${result.successCount.toLocaleString()} registros importados, ${result.errorCount.toLocaleString()} fallaron`);
-        if (result.errors && result.errors.length > 0) {
-          console.error("Errores de importación:", result.errors);
-        }
-      } else {
-        toast.success(`¡Importación completada! ${result.successCount.toLocaleString()} registros importados exitosamente`);
-        const clearedData = { ...importedData };
-        delete clearedData[type];
-        setImportedData(clearedData);
-        
-        // Limpiar diagnóstico
-        const clearedDiagnostics = { ...diagnostics };
-        delete clearedDiagnostics[type];
-        setDiagnostics(clearedDiagnostics);
+      if (!result.success || !result.jobId) {
+        throw new Error('Error iniciando importación');
       }
 
-      setUploadProgress(100);
+      const jobId = result.jobId;
+      toast.success(`Importación iniciada: ${result.totalRows.toLocaleString()} registros`);
+      
+      setUploadProgress(40);
+
+      // Polling del estado del job
+      let attempts = 0;
+      const maxAttempts = 600; // 10 minutos máximo (1 segundo por intento)
+      
+      const checkJobStatus = async (): Promise<void> => {
+        if (attempts >= maxAttempts) {
+          throw new Error('Tiempo de espera agotado. La importación continúa en segundo plano.');
+        }
+
+        const { data: job, error: jobError } = await supabase
+          .from('import_jobs')
+          .select('*')
+          .eq('id', jobId)
+          .single();
+
+        if (jobError) throw jobError;
+
+        // Calcular progreso
+        const progress = job.total_rows > 0 
+          ? 40 + Math.floor((job.processed_rows / job.total_rows) * 60)
+          : 40;
+        setUploadProgress(progress);
+
+        if (job.status === 'completed') {
+          setUploadProgress(100);
+          toast.success(
+            `¡Importación completada! ${job.success_count.toLocaleString()} registros exitosos${
+              job.error_count > 0 ? `, ${job.error_count} errores` : ''
+            }`
+          );
+          
+          // Limpiar datos después de importar exitosamente
+          const clearedData = { ...importedData };
+          delete clearedData[type];
+          setImportedData(clearedData);
+          
+          // Limpiar diagnóstico
+          const clearedDiagnostics = { ...diagnostics };
+          delete clearedDiagnostics[type];
+          setDiagnostics(clearedDiagnostics);
+          return;
+        }
+
+        if (job.status === 'failed') {
+          throw new Error(job.error_message || 'Error en la importación');
+        }
+
+        // Continuar polling
+        attempts++;
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        return checkJobStatus();
+      };
+
+      await checkJobStatus();
     } catch (error) {
       console.error("Error:", error);
       toast.error(`Error al importar datos: ${(error as Error).message || String(error)}`);

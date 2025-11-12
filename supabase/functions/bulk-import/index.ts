@@ -42,16 +42,12 @@ serve(async (req) => {
 
     console.log(`Processing ${type} file: ${file.name}, size: ${file.size} bytes`);
 
-    // Leer archivo Excel de manera eficiente
+    // Leer archivo Excel
     const arrayBuffer = await file.arrayBuffer();
-    
-    // Opciones para reducir uso de memoria
     const workbook = XLSX.read(new Uint8Array(arrayBuffer), { 
       type: 'array',
-      dense: true, // Más eficiente en memoria
-      cellDates: true,
-      cellNF: false,
-      cellStyles: false
+      dense: true,
+      raw: false
     });
     
     const worksheet = workbook.Sheets[workbook.SheetNames[0]];
@@ -69,115 +65,60 @@ serve(async (req) => {
       );
     }
 
-    // Preparar datos para inserción
-    let dataToInsert: any[] = [];
-    let tableName = '';
+    // Crear job de importación
+    const { data: job, error: jobError } = await supabaseClient
+      .from('import_jobs')
+      .insert({
+        user_id: user.id,
+        type: type,
+        status: 'pending',
+        total_rows: jsonData.length
+      })
+      .select()
+      .single();
 
-    switch (type) {
-      case 'clientes':
-        tableName = 'clientes';
-        dataToInsert = jsonData.map((item: any) => ({
-          user_id: user.id,
-          codigo: String(item.codigo || '').trim(),
-          nombre: String(item.nombre || '').trim()
-        })).filter(item => item.codigo && item.nombre);
-        break;
-
-      case 'marcas':
-        tableName = 'marcas';
-        dataToInsert = jsonData.map((item: any) => ({
-          user_id: user.id,
-          codigo: String(item.codigo || '').trim(),
-          nombre: String(item.nombre || '').trim()
-        })).filter(item => item.codigo && item.nombre);
-        break;
-
-      case 'vendedores':
-        tableName = 'vendedores';
-        dataToInsert = jsonData.map((item: any) => ({
-          user_id: user.id,
-          codigo: String(item.codigo || '').trim(),
-          nombre: String(item.nombre || '').trim()
-        })).filter(item => item.codigo && item.nombre);
-        break;
-
-      case 'ventas':
-        tableName = 'ventas_reales';
-        dataToInsert = jsonData.map((item: any) => ({
-          user_id: user.id,
-          codigo_cliente: String(item.codigo_cliente || '').trim(),
-          codigo_marca: String(item.codigo_marca || '').trim(),
-          codigo_vendedor: item.codigo_vendedor ? String(item.codigo_vendedor).trim() : null,
-          mes: String(item.mes || '').trim(),
-          monto: parseFloat(item.monto || 0)
-        })).filter(item => item.codigo_cliente && item.codigo_marca && item.mes && !isNaN(item.monto));
-        break;
-
-      default:
-        return new Response(
-          JSON.stringify({ error: 'Tipo inválido' }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+    if (jobError || !job) {
+      console.error('Error creating job:', jobError);
+      return new Response(
+        JSON.stringify({ error: 'Error creando trabajo de importación' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
-    console.log(`Prepared ${dataToInsert.length} valid records for insertion`);
+    console.log(`Created job ${job.id} for ${jsonData.length} rows`);
 
-    // Procesar en lotes grandes (5000 registros por lote)
+    // Insertar datos en staging en lotes
     const BATCH_SIZE = 5000;
-    let successCount = 0;
-    let errorCount = 0;
-    const errors: string[] = [];
+    let stagingInserted = 0;
 
-    for (let i = 0; i < dataToInsert.length; i += BATCH_SIZE) {
-      const batch = dataToInsert.slice(i, i + BATCH_SIZE);
-      const batchNum = Math.floor(i / BATCH_SIZE) + 1;
-      const totalBatches = Math.ceil(dataToInsert.length / BATCH_SIZE);
-      
-      console.log(`Processing batch ${batchNum}/${totalBatches} (${batch.length} records)`);
+    for (let i = 0; i < jsonData.length; i += BATCH_SIZE) {
+      const batch = jsonData.slice(i, i + BATCH_SIZE);
+      const stagingBatch = batch.map((item: any) => ({
+        job_id: job.id,
+        row_data: item
+      }));
 
-      try {
-        let result;
-        
-        if (type === 'ventas') {
-          // Para ventas usar insert directo
-          result = await supabaseClient
-            .from(tableName)
-            .insert(batch);
-        } else {
-          // Para otros tipos usar upsert
-          result = await supabaseClient
-            .from(tableName)
-            .upsert(batch, {
-              onConflict: 'user_id,codigo',
-              ignoreDuplicates: false
-            });
-        }
+      const { error: stagingError } = await supabaseClient
+        .from('import_staging')
+        .insert(stagingBatch);
 
-        if (result.error) {
-          console.error(`Error in batch ${batchNum}:`, result.error);
-          errorCount += batch.length;
-          errors.push(`Lote ${batchNum}: ${result.error.message}`);
-        } else {
-          successCount += batch.length;
-          console.log(`Batch ${batchNum} completed successfully`);
-        }
-      } catch (error) {
-        console.error(`Exception in batch ${batchNum}:`, error);
-        errorCount += batch.length;
-        errors.push(`Lote ${batchNum}: ${(error as Error).message || String(error)}`);
+      if (stagingError) {
+        console.error('Error inserting staging batch:', stagingError);
+      } else {
+        stagingInserted += batch.length;
       }
     }
 
-    console.log(`Import completed: ${successCount} success, ${errorCount} errors`);
+    console.log(`Inserted ${stagingInserted} rows into staging`);
+
+    // Iniciar procesamiento en background (no await)
+    processImportJob(supabaseClient, job.id, type, user.id);
 
     return new Response(
       JSON.stringify({
         success: true,
-        totalRows: jsonData.length,
-        validRows: dataToInsert.length,
-        successCount,
-        errorCount,
-        errors: errors.length > 0 ? errors : undefined
+        jobId: job.id,
+        totalRows: jsonData.length
       }),
       {
         status: 200,
@@ -193,3 +134,82 @@ serve(async (req) => {
     );
   }
 });
+
+// Procesar job en background
+async function processImportJob(
+  supabase: any,
+  jobId: string,
+  type: string,
+  userId: string
+) {
+  try {
+    console.log(`Starting background processing for job ${jobId}`);
+
+    await supabase
+      .from('import_jobs')
+      .update({ status: 'processing' })
+      .eq('id', jobId);
+
+    // Procesar en lotes usando la función de base de datos
+    let hasMore = true;
+    const BATCH_SIZE = 1000;
+
+    while (hasMore) {
+      const { data: result, error } = await supabase
+        .rpc('process_import_batch', {
+          p_job_id: jobId,
+          p_batch_size: BATCH_SIZE
+        });
+
+      if (error) {
+        console.error('Error processing batch:', error);
+        await supabase
+          .from('import_jobs')
+          .update({ 
+            status: 'failed',
+            error_message: error.message 
+          })
+          .eq('id', jobId);
+        return;
+      }
+
+      const processed = result[0]?.processed || 0;
+      hasMore = processed > 0;
+
+      console.log(`Processed ${processed} records for job ${jobId}`);
+    }
+
+    // Marcar como completado
+    const { data: finalJob } = await supabase
+      .from('import_jobs')
+      .select('processed_rows, error_count')
+      .eq('id', jobId)
+      .single();
+
+    await supabase
+      .from('import_jobs')
+      .update({ 
+        status: 'completed',
+        success_count: finalJob.processed_rows - finalJob.error_count
+      })
+      .eq('id', jobId);
+
+    // Limpiar staging
+    await supabase
+      .from('import_staging')
+      .delete()
+      .eq('job_id', jobId);
+
+    console.log(`Job ${jobId} completed successfully`);
+
+  } catch (error) {
+    console.error('Error in background processing:', error);
+    await supabase
+      .from('import_jobs')
+      .update({ 
+        status: 'failed',
+        error_message: String(error)
+      })
+      .eq('id', jobId);
+  }
+}

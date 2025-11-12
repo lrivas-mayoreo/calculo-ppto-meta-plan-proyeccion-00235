@@ -80,6 +80,80 @@ export type Database = {
         }
         Relationships: []
       }
+      import_jobs: {
+        Row: {
+          created_at: string | null
+          error_count: number | null
+          error_message: string | null
+          id: string
+          processed_rows: number | null
+          status: string
+          success_count: number | null
+          total_rows: number | null
+          type: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          error_count?: number | null
+          error_message?: string | null
+          id?: string
+          processed_rows?: number | null
+          status?: string
+          success_count?: number | null
+          total_rows?: number | null
+          type: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          error_count?: number | null
+          error_message?: string | null
+          id?: string
+          processed_rows?: number | null
+          status?: string
+          success_count?: number | null
+          total_rows?: number | null
+          type?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      import_staging: {
+        Row: {
+          created_at: string | null
+          id: string
+          job_id: string
+          processed: boolean | null
+          row_data: Json
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          job_id: string
+          processed?: boolean | null
+          row_data: Json
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          job_id?: string
+          processed?: boolean | null
+          row_data?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "import_staging_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "import_jobs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       marcas: {
         Row: {
           codigo: string
@@ -248,6 +322,13 @@ export type Database = {
           _user_id: string
         }
         Returns: boolean
+      }
+      process_import_batch: {
+        Args: { p_batch_size?: number; p_job_id: string }
+        Returns: {
+          errors: number
+          processed: number
+        }[]
       }
     }
     Enums: {
