@@ -100,84 +100,36 @@ export const DataImport = () => {
     data: any[],
     type: "clientes" | "marcas" | "vendedores" | "ventas"
   ): Promise<DiagnosticResult> => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      return {
-        hasErrors: true,
-        hasWarnings: false,
-        duplicatesInFile: 0,
-        duplicatesInDB: 0,
-        invalidRows: 0,
-        totalRows: data.length,
-        missingColumns: [],
-        extraColumns: []
-      };
-    }
-
-    // Validar columnas
+    // Validación simplificada - solo columnas
     const validation = validateExcel(data, type);
     
-    // Detectar duplicados de código en el archivo (solo códigos, nombre puede repetirse)
-    const codigosInFile = new Set<string>();
-    let duplicatesInFile = 0;
-    let invalidRows = 0;
+    // Contar filas inválidas solo en una muestra
+    const sampleSize = Math.min(100, data.length);
+    let invalidRowsSample = 0;
 
-    for (const item of data) {
-      // Para ventas, validar campos requeridos
+    for (let i = 0; i < sampleSize; i++) {
+      const item = data[i];
+      
       if (type === "ventas") {
         if (!item.codigo_cliente || !item.codigo_marca || !item.mes || item.monto === undefined) {
-          invalidRows++;
-          continue;
+          invalidRowsSample++;
         }
-        // Para ventas no contamos duplicados de código
-        continue;
-      }
-      
-      // Para clientes, marcas, vendedores
-      const codigo = String(item.codigo || "").trim();
-      
-      if (!codigo) {
-        invalidRows++;
-        continue;
-      }
-
-      if (!item.nombre) {
-        invalidRows++;
-        continue;
-      }
-
-      // Contar duplicados de código en el archivo (nombre puede repetirse)
-      if (codigosInFile.has(codigo)) {
-        duplicatesInFile++;
       } else {
-        codigosInFile.add(codigo);
+        const codigo = String(item.codigo || "").trim();
+        if (!codigo || !item.nombre) {
+          invalidRowsSample++;
+        }
       }
     }
 
-    // Los duplicados en BD se manejarán con upsert, solo informamos
-    let duplicatesInDB = 0;
-    const tableName = type === "ventas" ? "ventas_reales" : type;
-    
-    if (type !== "ventas" && codigosInFile.size > 0) {
-      // Verificar una muestra de códigos
-      const sampleCodes = Array.from(codigosInFile).slice(0, 50);
-      
-      for (const codigo of sampleCodes) {
-        const result = await supabase
-          .from(tableName as any)
-          .select("*", { count: "exact", head: true })
-          .eq("user_id", user.id)
-          .eq("codigo", codigo);
-        
-        if (result.count && result.count > 0) duplicatesInDB++;
-      }
-    }
+    // Extrapolar filas inválidas
+    const invalidRows = Math.round((invalidRowsSample / sampleSize) * data.length);
 
     return {
-      hasErrors: !validation.valid || invalidRows > 0,
-      hasWarnings: duplicatesInFile > 0 || duplicatesInDB > 0 || validation.extraColumns.length > 0,
-      duplicatesInFile,
-      duplicatesInDB,
+      hasErrors: !validation.valid || invalidRowsSample > sampleSize * 0.5,
+      hasWarnings: invalidRows > 0 || validation.extraColumns.length > 0,
+      duplicatesInFile: 0, // No validamos duplicados
+      duplicatesInDB: 0, // No validamos duplicados en BD
       invalidRows,
       totalRows: data.length,
       missingColumns: validation.missingColumns,
@@ -207,7 +159,7 @@ export const DataImport = () => {
         return;
       }
 
-      // Ejecutar diagnóstico
+      // Ejecutar diagnóstico rápido
       const diagnostic = await runDiagnostics(jsonData, type);
       
       const typedData = {
@@ -225,11 +177,11 @@ export const DataImport = () => {
       toast.dismiss();
       
       if (diagnostic.hasErrors) {
-        toast.error(`Archivo cargado con errores. Revisa el diagnóstico antes de importar.`);
+        toast.error(`Archivo con errores críticos. Verifica las columnas requeridas.`);
       } else if (diagnostic.hasWarnings) {
-        toast.warning(`Archivo cargado con advertencias. Revisa el diagnóstico antes de importar.`);
+        toast.warning(`${jsonData.length.toLocaleString()} registros cargados. Validación estimada.`);
       } else {
-        toast.success(`${jsonData.length.toLocaleString()} registros cargados correctamente`);
+        toast.success(`${jsonData.length.toLocaleString()} registros listos para importar`);
       }
     } catch (error) {
       console.error("Error reading Excel:", error);
@@ -249,12 +201,8 @@ export const DataImport = () => {
 
     const diagnostic = diagnostics[type];
     if (diagnostic?.hasErrors) {
-      toast.error("No se puede importar. El archivo tiene errores críticos. Corrígelos y vuelve a cargar el archivo.");
+      toast.error("No se puede importar. Verifica las columnas del archivo.");
       return;
-    }
-
-    if (diagnostic?.hasWarnings && diagnostic.duplicatesInDB > 0) {
-      toast.info("Se detectaron registros existentes. Se actualizarán automáticamente.");
     }
 
     setUploading(true);
@@ -373,13 +321,7 @@ export const DataImport = () => {
                     <AlertDescription className="space-y-1 text-sm">
                       <p><strong>Total de registros:</strong> {diagnostics.clientes.totalRows.toLocaleString()}</p>
                       {diagnostics.clientes.invalidRows > 0 && (
-                        <p className="text-destructive"><strong>⚠️ Filas inválidas:</strong> {diagnostics.clientes.invalidRows} (faltan campos requeridos)</p>
-                      )}
-                      {diagnostics.clientes.duplicatesInFile > 0 && (
-                        <p className="text-yellow-600"><strong>⚠️ Duplicados en el archivo:</strong> {diagnostics.clientes.duplicatesInFile}</p>
-                      )}
-                      {diagnostics.clientes.duplicatesInDB > 0 && (
-                        <p className="text-blue-600"><strong>ℹ️ Códigos que ya existen en la BD:</strong> {diagnostics.clientes.duplicatesInDB} (se actualizarán)</p>
+                        <p className="text-yellow-600"><strong>⚠️ Filas inválidas estimadas:</strong> ~{diagnostics.clientes.invalidRows.toLocaleString()}</p>
                       )}
                       {diagnostics.clientes.missingColumns.length > 0 && (
                         <p className="text-destructive"><strong>❌ Columnas faltantes:</strong> {diagnostics.clientes.missingColumns.join(", ")}</p>
@@ -388,7 +330,7 @@ export const DataImport = () => {
                         <p className="text-muted-foreground"><strong>ℹ️ Columnas extra (se ignorarán):</strong> {diagnostics.clientes.extraColumns.join(", ")}</p>
                       )}
                       {!diagnostics.clientes.hasErrors && !diagnostics.clientes.hasWarnings && (
-                        <p className="text-green-600 flex items-center gap-2"><CheckCircle className="h-4 w-4" /> Archivo válido, listo para importar</p>
+                        <p className="text-green-600 flex items-center gap-2"><CheckCircle className="h-4 w-4" /> Listo para importar</p>
                       )}
                     </AlertDescription>
                   </Alert>
@@ -454,16 +396,16 @@ export const DataImport = () => {
                     <AlertDescription className="space-y-1 text-sm">
                       <p><strong>Total de registros:</strong> {diagnostics.marcas.totalRows.toLocaleString()}</p>
                       {diagnostics.marcas.invalidRows > 0 && (
-                        <p className="text-destructive"><strong>⚠️ Filas inválidas:</strong> {diagnostics.marcas.invalidRows}</p>
+                        <p className="text-yellow-600"><strong>⚠️ Filas inválidas estimadas:</strong> ~{diagnostics.marcas.invalidRows.toLocaleString()}</p>
                       )}
-                      {diagnostics.marcas.duplicatesInFile > 0 && (
-                        <p className="text-yellow-600"><strong>⚠️ Duplicados en el archivo:</strong> {diagnostics.marcas.duplicatesInFile}</p>
+                      {diagnostics.marcas.missingColumns.length > 0 && (
+                        <p className="text-destructive"><strong>❌ Columnas faltantes:</strong> {diagnostics.marcas.missingColumns.join(", ")}</p>
                       )}
-                      {diagnostics.marcas.duplicatesInDB > 0 && (
-                        <p className="text-blue-600"><strong>ℹ️ Códigos que ya existen en la BD:</strong> {diagnostics.marcas.duplicatesInDB} (se actualizarán)</p>
+                      {diagnostics.marcas.extraColumns.length > 0 && (
+                        <p className="text-muted-foreground"><strong>ℹ️ Columnas extra (se ignorarán):</strong> {diagnostics.marcas.extraColumns.join(", ")}</p>
                       )}
                       {!diagnostics.marcas.hasErrors && !diagnostics.marcas.hasWarnings && (
-                        <p className="text-green-600 flex items-center gap-2"><CheckCircle className="h-4 w-4" /> Archivo válido</p>
+                        <p className="text-green-600 flex items-center gap-2"><CheckCircle className="h-4 w-4" /> Listo para importar</p>
                       )}
                     </AlertDescription>
                   </Alert>
@@ -529,16 +471,16 @@ export const DataImport = () => {
                     <AlertDescription className="space-y-1 text-sm">
                       <p><strong>Total de registros:</strong> {diagnostics.vendedores.totalRows.toLocaleString()}</p>
                       {diagnostics.vendedores.invalidRows > 0 && (
-                        <p className="text-destructive"><strong>⚠️ Filas inválidas:</strong> {diagnostics.vendedores.invalidRows}</p>
+                        <p className="text-yellow-600"><strong>⚠️ Filas inválidas estimadas:</strong> ~{diagnostics.vendedores.invalidRows.toLocaleString()}</p>
                       )}
-                      {diagnostics.vendedores.duplicatesInFile > 0 && (
-                        <p className="text-yellow-600"><strong>⚠️ Duplicados en el archivo:</strong> {diagnostics.vendedores.duplicatesInFile}</p>
+                      {diagnostics.vendedores.missingColumns.length > 0 && (
+                        <p className="text-destructive"><strong>❌ Columnas faltantes:</strong> {diagnostics.vendedores.missingColumns.join(", ")}</p>
                       )}
-                      {diagnostics.vendedores.duplicatesInDB > 0 && (
-                        <p className="text-blue-600"><strong>ℹ️ Códigos que ya existen en la BD:</strong> {diagnostics.vendedores.duplicatesInDB} (se actualizarán)</p>
+                      {diagnostics.vendedores.extraColumns.length > 0 && (
+                        <p className="text-muted-foreground"><strong>ℹ️ Columnas extra (se ignorarán):</strong> {diagnostics.vendedores.extraColumns.join(", ")}</p>
                       )}
                       {!diagnostics.vendedores.hasErrors && !diagnostics.vendedores.hasWarnings && (
-                        <p className="text-green-600 flex items-center gap-2"><CheckCircle className="h-4 w-4" /> Archivo válido</p>
+                        <p className="text-green-600 flex items-center gap-2"><CheckCircle className="h-4 w-4" /> Listo para importar</p>
                       )}
                     </AlertDescription>
                   </Alert>
@@ -605,13 +547,16 @@ export const DataImport = () => {
                     <AlertDescription className="space-y-1 text-sm">
                       <p><strong>Total de registros:</strong> {diagnostics.ventas.totalRows.toLocaleString()}</p>
                       {diagnostics.ventas.invalidRows > 0 && (
-                        <p className="text-destructive"><strong>⚠️ Filas inválidas:</strong> {diagnostics.ventas.invalidRows}</p>
+                        <p className="text-yellow-600"><strong>⚠️ Filas inválidas estimadas:</strong> ~{diagnostics.ventas.invalidRows.toLocaleString()}</p>
                       )}
-                      {diagnostics.ventas.duplicatesInDB > 0 && (
-                        <p className="text-blue-600"><strong>ℹ️ Registros existentes en BD:</strong> {diagnostics.ventas.duplicatesInDB} (se agregarán como nuevos)</p>
+                      {diagnostics.ventas.missingColumns.length > 0 && (
+                        <p className="text-destructive"><strong>❌ Columnas faltantes:</strong> {diagnostics.ventas.missingColumns.join(", ")}</p>
+                      )}
+                      {diagnostics.ventas.extraColumns.length > 0 && (
+                        <p className="text-muted-foreground"><strong>ℹ️ Columnas extra (se ignorarán):</strong> {diagnostics.ventas.extraColumns.join(", ")}</p>
                       )}
                       {!diagnostics.ventas.hasErrors && !diagnostics.ventas.hasWarnings && (
-                        <p className="text-green-600 flex items-center gap-2"><CheckCircle className="h-4 w-4" /> Archivo válido</p>
+                        <p className="text-green-600 flex items-center gap-2"><CheckCircle className="h-4 w-4" /> Listo para importar</p>
                       )}
                     </AlertDescription>
                   </Alert>

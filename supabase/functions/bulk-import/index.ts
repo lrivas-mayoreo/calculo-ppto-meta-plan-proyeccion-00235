@@ -42,11 +42,23 @@ serve(async (req) => {
 
     console.log(`Processing ${type} file: ${file.name}, size: ${file.size} bytes`);
 
-    // Leer archivo Excel
+    // Leer archivo Excel de manera eficiente
     const arrayBuffer = await file.arrayBuffer();
-    const workbook = XLSX.read(new Uint8Array(arrayBuffer), { type: 'array' });
+    
+    // Opciones para reducir uso de memoria
+    const workbook = XLSX.read(new Uint8Array(arrayBuffer), { 
+      type: 'array',
+      dense: true, // Más eficiente en memoria
+      cellDates: true,
+      cellNF: false,
+      cellStyles: false
+    });
+    
     const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-    const jsonData = XLSX.utils.sheet_to_json(worksheet);
+    const jsonData = XLSX.utils.sheet_to_json(worksheet, {
+      defval: null,
+      raw: false
+    });
 
     console.log(`Parsed ${jsonData.length} rows from Excel`);
 
