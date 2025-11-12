@@ -4,6 +4,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Upload, Download, FileSpreadsheet } from "lucide-react";
@@ -19,6 +20,9 @@ interface ImportedData {
 export const DataImport = () => {
   const [uploading, setUploading] = useState(false);
   const [importedData, setImportedData] = useState<ImportedData>({});
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [currentBatch, setCurrentBatch] = useState(0);
+  const [totalBatches, setTotalBatches] = useState(0);
 
   const downloadTemplate = (type: "clientes" | "marcas" | "vendedores" | "ventas") => {
     let data: any[] = [];
@@ -115,11 +119,14 @@ export const DataImport = () => {
     }
 
     setUploading(true);
+    setUploadProgress(0);
+    setCurrentBatch(0);
 
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
         toast.error("Usuario no autenticado");
+        setUploading(false);
         return;
       }
 
@@ -159,27 +166,41 @@ export const DataImport = () => {
           break;
       }
 
-      let result;
-      switch (type) {
-        case "clientes":
-          result = await supabase.from("clientes").insert(dataToInsert);
-          break;
-        case "marcas":
-          result = await supabase.from("marcas").insert(dataToInsert);
-          break;
-        case "vendedores":
-          result = await supabase.from("vendedores").insert(dataToInsert);
-          break;
-        case "ventas":
-          result = await supabase.from("ventas_reales").insert(dataToInsert);
-          break;
+      // Procesar en lotes de 1000 registros
+      const BATCH_SIZE = 1000;
+      const batches = [];
+      for (let i = 0; i < dataToInsert.length; i += BATCH_SIZE) {
+        batches.push(dataToInsert.slice(i, i + BATCH_SIZE));
       }
 
-      if (result.error) {
-        console.error("Error importing data:", result.error);
-        toast.error(`Error al importar: ${result.error.message}`);
+      setTotalBatches(batches.length);
+      
+      let successCount = 0;
+      let errorCount = 0;
+      const tableName = type === "ventas" ? "ventas_reales" : type;
+
+      for (let i = 0; i < batches.length; i++) {
+        setCurrentBatch(i + 1);
+        const batch = batches[i];
+
+        const result = await supabase.from(tableName).insert(batch);
+
+        if (result.error) {
+          console.error(`Error en lote ${i + 1}:`, result.error);
+          errorCount += batch.length;
+        } else {
+          successCount += batch.length;
+        }
+
+        // Actualizar progreso
+        const progress = Math.round(((i + 1) / batches.length) * 100);
+        setUploadProgress(progress);
+      }
+
+      if (errorCount > 0) {
+        toast.warning(`${successCount} registros importados, ${errorCount} fallaron`);
       } else {
-        toast.success(`${dataToInsert.length} registros importados exitosamente`);
+        toast.success(`¡Importación completada! ${successCount} registros importados exitosamente`);
         const clearedData = { ...importedData };
         delete clearedData[type];
         setImportedData(clearedData);
@@ -189,6 +210,9 @@ export const DataImport = () => {
       toast.error("Error al importar datos");
     } finally {
       setUploading(false);
+      setUploadProgress(0);
+      setCurrentBatch(0);
+      setTotalBatches(0);
     }
   };
 
@@ -240,10 +264,19 @@ export const DataImport = () => {
             </div>
 
             {importedData.clientes && importedData.clientes.length > 0 && (
-              <div className="space-y-2">
+              <div className="space-y-3">
                 <p className="text-sm font-medium text-foreground">
-                  {importedData.clientes.length} registros listos para importar
+                  {importedData.clientes.length.toLocaleString()} registros listos para importar
                 </p>
+                {uploading && (
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-sm text-muted-foreground">
+                      <span>Procesando lote {currentBatch} de {totalBatches}</span>
+                      <span>{uploadProgress}%</span>
+                    </div>
+                    <Progress value={uploadProgress} className="h-2" />
+                  </div>
+                )}
                 <Button
                   onClick={() => importToDatabase("clientes")}
                   disabled={uploading}
@@ -285,10 +318,19 @@ export const DataImport = () => {
             </div>
 
             {importedData.marcas && importedData.marcas.length > 0 && (
-              <div className="space-y-2">
+              <div className="space-y-3">
                 <p className="text-sm font-medium text-foreground">
-                  {importedData.marcas.length} registros listos para importar
+                  {importedData.marcas.length.toLocaleString()} registros listos para importar
                 </p>
+                {uploading && (
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-sm text-muted-foreground">
+                      <span>Procesando lote {currentBatch} de {totalBatches}</span>
+                      <span>{uploadProgress}%</span>
+                    </div>
+                    <Progress value={uploadProgress} className="h-2" />
+                  </div>
+                )}
                 <Button
                   onClick={() => importToDatabase("marcas")}
                   disabled={uploading}
@@ -330,10 +372,19 @@ export const DataImport = () => {
             </div>
 
             {importedData.vendedores && importedData.vendedores.length > 0 && (
-              <div className="space-y-2">
+              <div className="space-y-3">
                 <p className="text-sm font-medium text-foreground">
-                  {importedData.vendedores.length} registros listos para importar
+                  {importedData.vendedores.length.toLocaleString()} registros listos para importar
                 </p>
+                {uploading && (
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-sm text-muted-foreground">
+                      <span>Procesando lote {currentBatch} de {totalBatches}</span>
+                      <span>{uploadProgress}%</span>
+                    </div>
+                    <Progress value={uploadProgress} className="h-2" />
+                  </div>
+                )}
                 <Button
                   onClick={() => importToDatabase("vendedores")}
                   disabled={uploading}
@@ -376,10 +427,19 @@ export const DataImport = () => {
             </div>
 
             {importedData.ventas && importedData.ventas.length > 0 && (
-              <div className="space-y-2">
+              <div className="space-y-3">
                 <p className="text-sm font-medium text-foreground">
-                  {importedData.ventas.length} registros listos para importar
+                  {importedData.ventas.length.toLocaleString()} registros listos para importar
                 </p>
+                {uploading && (
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-sm text-muted-foreground">
+                      <span>Procesando lote {currentBatch} de {totalBatches}</span>
+                      <span>{uploadProgress}%</span>
+                    </div>
+                    <Progress value={uploadProgress} className="h-2" />
+                  </div>
+                )}
                 <Button
                   onClick={() => importToDatabase("ventas")}
                   disabled={uploading}
