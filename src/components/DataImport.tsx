@@ -33,8 +33,6 @@ export const DataImport = () => {
   const [uploading, setUploading] = useState(false);
   const [importedData, setImportedData] = useState<ImportedData>({});
   const [uploadProgress, setUploadProgress] = useState(0);
-  const [currentBatch, setCurrentBatch] = useState(0);
-  const [totalBatches, setTotalBatches] = useState(0);
   const [diagnostics, setDiagnostics] = useState<Record<string, DiagnosticResult>>({});
 
   const downloadTemplate = (type: "clientes" | "marcas" | "vendedores" | "ventas") => {
@@ -261,112 +259,61 @@ export const DataImport = () => {
 
     setUploading(true);
     setUploadProgress(0);
-    setCurrentBatch(0);
 
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
         toast.error("Usuario no autenticado");
         setUploading(false);
         return;
       }
 
-      let dataToInsert: any[] = [];
+      // Crear el archivo Excel original para enviarlo al backend
+      const ws = XLSX.utils.json_to_sheet(data);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Datos");
+      const excelBuffer = XLSX.write(wb, { type: 'array', bookType: 'xlsx' });
+      const blob = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
 
-      switch (type) {
-        case "clientes":
-          dataToInsert = (data as any[]).map(item => ({
-            user_id: user.id,
-            codigo: String(item.codigo).trim(),
-            nombre: String(item.nombre).trim()
-          }));
-          break;
-        case "marcas":
-          dataToInsert = (data as any[]).map(item => ({
-            user_id: user.id,
-            codigo: String(item.codigo).trim(),
-            nombre: String(item.nombre).trim()
-          }));
-          break;
-        case "vendedores":
-          dataToInsert = (data as any[]).map(item => ({
-            user_id: user.id,
-            codigo: String(item.codigo).trim(),
-            nombre: String(item.nombre).trim()
-          }));
-          break;
-        case "ventas":
-          dataToInsert = (data as any[]).map(item => ({
-            user_id: user.id,
-            codigo_cliente: String(item.codigo_cliente).trim(),
-            codigo_marca: String(item.codigo_marca).trim(),
-            codigo_vendedor: item.codigo_vendedor ? String(item.codigo_vendedor).trim() : null,
-            mes: String(item.mes).trim(),
-            monto: parseFloat(item.monto)
-          }));
-          break;
+      // Enviar al edge function
+      const formData = new FormData();
+      formData.append('file', blob, `${type}.xlsx`);
+      formData.append('type', type);
+
+      const response = await supabase.functions.invoke('bulk-import', {
+        body: formData,
+      });
+
+      if (response.error) {
+        throw new Error(response.error.message);
       }
 
-      // Procesar en lotes de 1000 registros
-      const BATCH_SIZE = 1000;
-      const batches = [];
-      for (let i = 0; i < dataToInsert.length; i += BATCH_SIZE) {
-        batches.push(dataToInsert.slice(i, i + BATCH_SIZE));
-      }
+      const result = response.data;
 
-      setTotalBatches(batches.length);
-      
-      let successCount = 0;
-      let errorCount = 0;
-      const tableName = type === "ventas" ? "ventas_reales" : type;
-
-      for (let i = 0; i < batches.length; i++) {
-        setCurrentBatch(i + 1);
-        const batch = batches[i];
-
-        // Usar upsert para insertar o actualizar registros existentes
-        let result;
-        if (type === "ventas") {
-          // Para ventas no hay constraint único simple, usar insert directo
-          result = await supabase.from(tableName).insert(batch);
-        } else {
-          // Para clientes, marcas, vendedores: upsert basado en user_id + codigo
-          result = await supabase
-            .from(tableName)
-            .upsert(batch, { 
-              onConflict: 'user_id,codigo',
-              ignoreDuplicates: false 
-            });
+      if (result.errorCount > 0) {
+        toast.warning(`${result.successCount.toLocaleString()} registros importados, ${result.errorCount.toLocaleString()} fallaron`);
+        if (result.errors && result.errors.length > 0) {
+          console.error("Errores de importación:", result.errors);
         }
-
-        if (result.error) {
-          console.error(`Error en lote ${i + 1}:`, result.error);
-          errorCount += batch.length;
-        } else {
-          successCount += batch.length;
-        }
-
-        // Actualizar progreso
-        const progress = Math.round(((i + 1) / batches.length) * 100);
-        setUploadProgress(progress);
-      }
-
-      if (errorCount > 0) {
-        toast.warning(`${successCount} registros importados, ${errorCount} fallaron`);
       } else {
-        toast.success(`¡Importación completada! ${successCount} registros importados exitosamente`);
+        toast.success(`¡Importación completada! ${result.successCount.toLocaleString()} registros importados exitosamente`);
         const clearedData = { ...importedData };
         delete clearedData[type];
         setImportedData(clearedData);
+        
+        // Limpiar diagnóstico
+        const clearedDiagnostics = { ...diagnostics };
+        delete clearedDiagnostics[type];
+        setDiagnostics(clearedDiagnostics);
       }
+
+      setUploadProgress(100);
     } catch (error) {
       console.error("Error:", error);
-      toast.error("Error al importar datos");
+      toast.error(`Error al importar datos: ${(error as Error).message || String(error)}`);
     } finally {
       setUploading(false);
-      setUploadProgress(0);
-      setCurrentBatch(0);
-      setTotalBatches(0);
+      setTimeout(() => setUploadProgress(0), 1000);
     }
   };
 
@@ -452,7 +399,7 @@ export const DataImport = () => {
                 {uploading && (
                   <div className="space-y-2">
                     <div className="flex justify-between text-sm text-muted-foreground">
-                      <span>Procesando lote {currentBatch} de {totalBatches}</span>
+                      <span>Importando al servidor...</span>
                       <span>{uploadProgress}%</span>
                     </div>
                     <Progress value={uploadProgress} className="h-2" />
@@ -527,7 +474,7 @@ export const DataImport = () => {
                 {uploading && (
                   <div className="space-y-2">
                     <div className="flex justify-between text-sm text-muted-foreground">
-                      <span>Procesando lote {currentBatch} de {totalBatches}</span>
+                      <span>Importando al servidor...</span>
                       <span>{uploadProgress}%</span>
                     </div>
                     <Progress value={uploadProgress} className="h-2" />
@@ -602,7 +549,7 @@ export const DataImport = () => {
                 {uploading && (
                   <div className="space-y-2">
                     <div className="flex justify-between text-sm text-muted-foreground">
-                      <span>Procesando lote {currentBatch} de {totalBatches}</span>
+                      <span>Importando al servidor...</span>
                       <span>{uploadProgress}%</span>
                     </div>
                     <Progress value={uploadProgress} className="h-2" />
@@ -675,7 +622,7 @@ export const DataImport = () => {
                 {uploading && (
                   <div className="space-y-2">
                     <div className="flex justify-between text-sm text-muted-foreground">
-                      <span>Procesando lote {currentBatch} de {totalBatches}</span>
+                      <span>Importando al servidor...</span>
                       <span>{uploadProgress}%</span>
                     </div>
                     <Progress value={uploadProgress} className="h-2" />
