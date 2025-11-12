@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-//import { Checkbox } from "@/components/ui/checkbox";
+// import { Checkbox } from "@/components/ui/checkbox"; // ya no se usa
 import { Sparkles, Download, Check } from "lucide-react";
 import {
   Dialog,
@@ -14,7 +14,6 @@ import {
 } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
-//import { Sparkles, Download } from "lucide-react";
 import * as XLSX from "xlsx";
 
 interface SuggestedBudgetProps {
@@ -57,9 +56,8 @@ export const SuggestedBudget = ({
   >([]);
   const [isOpen, setIsOpen] = useState(false);
 
-  // Convert date format to month-year format (e.g., "diciembre-2024")
+  // Convierte "YYYY/MM/DD" o "YYYY-MM-DD" a "mes-AAAA" (es-ES)
   const convertDateToMesAnio = (dateStr: string): string => {
-    // Handle both YYYY/MM/DD and YYYY-MM-DD formats
     const cleanDate = dateStr.replace(/\//g, "-");
     const [year, month, day] = cleanDate.split("-").map(Number);
     const date = new Date(year, month - 1, day);
@@ -68,43 +66,21 @@ export const SuggestedBudget = ({
     return `${mes}-${anio}`;
   };
 
-  // Filter historical data by selected months
+  // Filtra históricos por meses seleccionados
   const filteredHistoricalData = useMemo(() => {
-    console.log("=== DEBUG FILTRADO ===");
-    console.log("Meses seleccionados:", selectedMeses);
-    console.log("Total datos históricos:", historicalData.length);
-    console.log("Datos históricos completos:", historicalData);
-
     if (selectedMeses.length === 0) return [];
-
-    // Log sample of dates to see format
-    if (historicalData.length > 0) {
-      console.log(
-        "Muestra de fechas originales:",
-        historicalData.slice(0, 3).map((d) => d.fechaDestino),
-      );
-      console.log(
-        "Muestra de fechas convertidas:",
-        historicalData.slice(0, 3).map((d) => convertDateToMesAnio(d.fechaDestino)),
-      );
-    }
 
     const filtered = historicalData.filter((item) => {
       const itemMesAnio = convertDateToMesAnio(item.fechaDestino);
-      const matches = selectedMeses.includes(itemMesAnio) && item.presupuesto > 0;
-      return matches;
+      return selectedMeses.includes(itemMesAnio) && item.presupuesto > 0;
     });
-
-    console.log("Datos después del filtro:", filtered.length);
-    console.log("Empresas en datos filtrados:", [...new Set(filtered.map((d) => d.empresa))]);
 
     return filtered;
   }, [historicalData, selectedMeses]);
 
   const handleMesToggle = (mes: string) => {
     setSelectedMeses((prev) => (prev.includes(mes) ? prev.filter((m) => m !== mes) : [...prev, mes]));
-    // Reset distribution when months change
-    setSuggestedDistribution([]);
+    setSuggestedDistribution([]); // reset distribución al cambiar meses
   };
 
   const calculateSuggestion = () => {
@@ -112,17 +88,14 @@ export const SuggestedBudget = ({
       toast.error("Seleccione al menos un mes de referencia");
       return;
     }
-
     if (!totalBudget || parseFloat(totalBudget) <= 0) {
       toast.error("Ingrese un monto de presupuesto válido");
       return;
     }
-
     if (!targetDate) {
       toast.error("Seleccione una fecha destino");
       return;
     }
-
     if (filteredHistoricalData.length === 0) {
       toast.error("No hay datos históricos en los meses seleccionados");
       return;
@@ -130,15 +103,11 @@ export const SuggestedBudget = ({
 
     const budget = parseFloat(totalBudget);
 
-    console.log("Datos filtrados totales:", filteredHistoricalData.length);
-
-    // Calculate average sales from ventasData using the same formula as main calculation
     // Promedio = Σ(Ventas en Meses de Referencia) / Cantidad de Meses de Referencia
     const brandEmpresaData = new Map<string, { empresa: string; totalVentas: number; totalPresupuesto: number }>();
 
-    // First, get sales data from ventasData for selected months and available brands
+    // Ventas de los meses seleccionados
     const ventasMesesSeleccionados = ventasData.filter((v) => selectedMeses.includes(v.mesAnio));
-
     ventasMesesSeleccionados.forEach((venta) => {
       const key = `${venta.marca}|${venta.empresa}`;
       const current = brandEmpresaData.get(key);
@@ -149,7 +118,7 @@ export const SuggestedBudget = ({
       }
     });
 
-    // Add historical budget data
+    // Presupuestos históricos de los meses seleccionados
     filteredHistoricalData.forEach((item) => {
       const key = `${item.marca}|${item.empresa}`;
       const current = brandEmpresaData.get(key);
@@ -160,14 +129,12 @@ export const SuggestedBudget = ({
       }
     });
 
-    console.log("Datos por marca+empresa:", Object.fromEntries(brandEmpresaData));
-
-    // Calculate average sales per brand using the formula
+    // Marcas válidas: con ventas y presupuesto
     const validBrands = Array.from(brandEmpresaData.entries())
-      .filter(([_, data]) => data.totalPresupuesto > 0 && data.totalVentas > 0)
+      .filter(([, data]) => data.totalPresupuesto > 0 && data.totalVentas > 0)
       .map(([key, data]) => {
         const [marca] = key.split("|");
-        const promedioVenta = data.totalVentas / selectedMeses.length; // Promedio = Σ(Ventas) / Cantidad de Meses
+        const promedioVenta = data.totalVentas / selectedMeses.length;
         return { marca, empresa: data.empresa, total: data.totalPresupuesto, promedioVenta };
       });
 
@@ -178,7 +145,6 @@ export const SuggestedBudget = ({
 
     const totalHistorical = validBrands.reduce((sum, item) => sum + item.total, 0);
 
-    // Calculate percentage participation and suggested amounts
     const distribution = validBrands
       .map((item) => {
         const porcentaje = (item.total / totalHistorical) * 100;
@@ -189,7 +155,6 @@ export const SuggestedBudget = ({
 
     setSuggestedDistribution(distribution);
 
-    // Show average sales info
     const promedioTotal = validBrands.reduce((sum, item) => sum + item.promedioVenta, 0);
     const promedioGeneral = promedioTotal / validBrands.length;
 
@@ -258,6 +223,7 @@ export const SuggestedBudget = ({
           Presupuesto Sugerido
         </Button>
       </DialogTrigger>
+
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -271,9 +237,8 @@ export const SuggestedBudget = ({
         </DialogHeader>
 
         <div className="space-y-4 py-4">
-          {/* Months selection */}
+          {/* Selección de meses (tiles) */}
           <div className="space-y-2">
-            {/* <Label className="text-base font-semibold">Meses de Referencia *</Label> */}
             <div className="flex items-center justify-between">
               <Label className="text-base font-semibold">Meses de Referencia *</Label>
               {selectedMeses.length > 0 && (
@@ -282,6 +247,7 @@ export const SuggestedBudget = ({
                 </Button>
               )}
             </div>
+
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 max-h-48 overflow-y-auto">
               {mesesDisponibles.map((mes) => {
                 const selected = selectedMeses.includes(mes);
@@ -294,7 +260,7 @@ export const SuggestedBudget = ({
                     className={[
                       "relative w-full rounded-xl border px-3 py-2 text-sm font-medium text-left transition",
                       "focus:outline-none focus:ring-2 focus:ring-offset-2",
-                      selected ? "border-primary bg-primary/5 ring-primary" : "border-muted hover:border-foreground/40",
+                      selected ? "border-blue-600 bg-blue-50 ring-blue-600" : "border-gray-300 hover:border-gray-400",
                     ].join(" ")}
                   >
                     <span className="block truncate pr-6">{mes}</span>
@@ -303,38 +269,16 @@ export const SuggestedBudget = ({
                 );
               })}
             </div>
+
             {selectedMeses.length > 0 && (
-              <p className="text-sm text-muted-foreground">
+              <p className="text-sm text-gray-500">
                 {selectedMeses.length} {selectedMeses.length === 1 ? "mes seleccionado" : "meses seleccionados"}
               </p>
-            )}{" "}
-            /*para mejorar el formato de los botones*/
-            {/* <Label className="text-base font-semibold">Meses de Referencia *</Label>
-            <div className="grid grid-cols-3 gap-2 max-h-48 overflow-y-auto border rounded-md p-3">
-              {mesesDisponibles.map((mes) => (
-                <div key={mes} className="flex items-center space-x-2">
-                  <Checkbox
-                    id={`mes-${mes}`}
-                    checked={selectedMeses.includes(mes)}
-                    onCheckedChange={() => handleMesToggle(mes)}
-                  />
-                  <Label
-                    htmlFor={`mes-${mes}`}
-                    className="text-sm font-normal cursor-pointer"
-                  >
-                    {mes}
-                  </Label>
-                </div>
-              ))}
-            </div>
-            {selectedMeses.length > 0 && (
-              <p className="text-sm text-muted-foreground">
-                {selectedMeses.length} {selectedMeses.length === 1 ? 'mes seleccionado' : 'meses seleccionados'}
-              </p>
-            )} */}
+            )}
+            {/* para mejorar el formato de los botones */}
           </div>
 
-          {/* Show inputs only if months are selected */}
+          {/* Inputs solo si hay meses y datos */}
           {selectedMeses.length > 0 && filteredHistoricalData.length > 0 && (
             <>
               <div className="grid grid-cols-2 gap-4">
