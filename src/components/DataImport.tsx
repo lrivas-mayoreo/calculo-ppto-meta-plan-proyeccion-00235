@@ -5,9 +5,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { Upload, Download, FileSpreadsheet } from "lucide-react";
+import { Upload, Download, FileSpreadsheet, AlertTriangle, CheckCircle } from "lucide-react";
 import * as XLSX from "xlsx";
 
 interface ImportedData {
@@ -17,12 +18,24 @@ interface ImportedData {
   ventas?: Array<{ codigo_cliente: string; codigo_marca: string; codigo_vendedor: string; mes: string; monto: number }>;
 }
 
+interface DiagnosticResult {
+  hasErrors: boolean;
+  hasWarnings: boolean;
+  duplicatesInFile: number;
+  duplicatesInDB: number;
+  invalidRows: number;
+  totalRows: number;
+  missingColumns: string[];
+  extraColumns: string[];
+}
+
 export const DataImport = () => {
   const [uploading, setUploading] = useState(false);
   const [importedData, setImportedData] = useState<ImportedData>({});
   const [uploadProgress, setUploadProgress] = useState(0);
   const [currentBatch, setCurrentBatch] = useState(0);
   const [totalBatches, setTotalBatches] = useState(0);
+  const [diagnostics, setDiagnostics] = useState<Record<string, DiagnosticResult>>({});
 
   const downloadTemplate = (type: "clientes" | "marcas" | "vendedores" | "ventas") => {
     let data: any[] = [];
@@ -53,10 +66,10 @@ export const DataImport = () => {
     XLSX.writeFile(wb, filename);
   };
 
-  const validateExcel = (data: any[], type: string): boolean => {
+  const validateExcel = (data: any[], type: string): { valid: boolean; missingColumns: string[]; extraColumns: string[] } => {
     if (!data || data.length === 0) {
       toast.error("El archivo Excel está vacío");
-      return false;
+      return { valid: false, missingColumns: [], extraColumns: [] };
     }
 
     const requiredFields: Record<string, string[]> = {
@@ -68,15 +81,121 @@ export const DataImport = () => {
 
     const fields = requiredFields[type];
     const firstRow = data[0];
+    const actualColumns = Object.keys(firstRow);
     
-    for (const field of fields) {
-      if (!(field in firstRow)) {
-        toast.error(`Falta la columna requerida: ${field}`);
-        return false;
+    const missingColumns = fields.filter(field => !(field in firstRow));
+    const extraColumns = actualColumns.filter(col => !fields.includes(col));
+    
+    if (missingColumns.length > 0) {
+      toast.error(`Faltan columnas requeridas: ${missingColumns.join(", ")}`);
+      return { valid: false, missingColumns, extraColumns };
+    }
+
+    if (extraColumns.length > 0) {
+      toast.warning(`Columnas adicionales detectadas (se ignorarán): ${extraColumns.join(", ")}`);
+    }
+
+    return { valid: true, missingColumns, extraColumns };
+  };
+
+  const runDiagnostics = async (
+    data: any[],
+    type: "clientes" | "marcas" | "vendedores" | "ventas"
+  ): Promise<DiagnosticResult> => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      return {
+        hasErrors: true,
+        hasWarnings: false,
+        duplicatesInFile: 0,
+        duplicatesInDB: 0,
+        invalidRows: 0,
+        totalRows: data.length,
+        missingColumns: [],
+        extraColumns: []
+      };
+    }
+
+    // Validar columnas
+    const validation = validateExcel(data, type);
+    
+    // Detectar duplicados en el archivo
+    const codigosInFile = new Set<string>();
+    let duplicatesInFile = 0;
+    let invalidRows = 0;
+
+    for (const item of data) {
+      const codigo = String(item.codigo || item.codigo_cliente || "").trim();
+      
+      // Validar que los campos requeridos no estén vacíos
+      if (!codigo) {
+        invalidRows++;
+        continue;
+      }
+
+      if (type === "ventas") {
+        if (!item.codigo_cliente || !item.codigo_marca || !item.mes || !item.monto) {
+          invalidRows++;
+          continue;
+        }
+      } else {
+        if (!item.nombre) {
+          invalidRows++;
+          continue;
+        }
+      }
+
+      if (codigosInFile.has(codigo)) {
+        duplicatesInFile++;
+      } else {
+        codigosInFile.add(codigo);
       }
     }
 
-    return true;
+    // Detectar duplicados en la base de datos
+    let duplicatesInDB = 0;
+    const tableName = type === "ventas" ? "ventas_reales" : type;
+    
+    if (type === "ventas") {
+      // Para ventas, verificar solo una muestra pequeña
+      const sampleSize = Math.min(50, data.length);
+      for (let i = 0; i < sampleSize; i++) {
+        const item = data[i];
+        const result = await supabase
+          .from(tableName as "ventas_reales")
+          .select("*", { count: "exact", head: true })
+          .eq("user_id", user.id)
+          .eq("codigo_cliente", String(item.codigo_cliente || "").trim())
+          .eq("codigo_marca", String(item.codigo_marca || "").trim())
+          .eq("mes", String(item.mes || "").trim());
+        
+        if (result.count && result.count > 0) duplicatesInDB++;
+      }
+    } else {
+      // Para otros tipos, verificar códigos únicos (muestra)
+      const sampleCodes = Array.from(codigosInFile).slice(0, 50);
+      
+      for (const codigo of sampleCodes) {
+        const result = await supabase
+          .from(tableName as any)
+          .select("*", { count: "exact", head: true })
+          .eq("user_id", user.id)
+          .eq("codigo", codigo);
+        
+        if (result.count && result.count > 0) duplicatesInDB++;
+      }
+    }
+
+    return {
+      hasErrors: !validation.valid || invalidRows > 0,
+      hasWarnings: duplicatesInFile > 0 || duplicatesInDB > 0 || validation.extraColumns.length > 0,
+      duplicatesInFile,
+      duplicatesInDB,
+      invalidRows,
+      totalRows: data.length,
+      missingColumns: validation.missingColumns,
+      extraColumns: validation.extraColumns
+    };
   };
 
   const handleExcelUpload = async (
@@ -87,24 +206,47 @@ export const DataImport = () => {
     if (!file) return;
 
     try {
+      toast.loading("Analizando archivo...");
+      
       const data = await file.arrayBuffer();
       const workbook = XLSX.read(data);
       const worksheet = workbook.Sheets[workbook.SheetNames[0]];
       const jsonData = XLSX.utils.sheet_to_json(worksheet);
 
-      if (!validateExcel(jsonData, type)) {
+      const validation = validateExcel(jsonData, type);
+      if (!validation.valid) {
         event.target.value = "";
+        toast.dismiss();
         return;
       }
 
+      // Ejecutar diagnóstico
+      const diagnostic = await runDiagnostics(jsonData, type);
+      
       const typedData = {
         ...importedData,
         [type]: jsonData
       } as ImportedData;
       setImportedData(typedData);
-      toast.success(`${jsonData.length} registros cargados del Excel`);
+      
+      // Guardar diagnóstico
+      setDiagnostics({
+        ...diagnostics,
+        [type]: diagnostic
+      });
+
+      toast.dismiss();
+      
+      if (diagnostic.hasErrors) {
+        toast.error(`Archivo cargado con errores. Revisa el diagnóstico antes de importar.`);
+      } else if (diagnostic.hasWarnings) {
+        toast.warning(`Archivo cargado con advertencias. Revisa el diagnóstico antes de importar.`);
+      } else {
+        toast.success(`${jsonData.length.toLocaleString()} registros cargados correctamente`);
+      }
     } catch (error) {
       console.error("Error reading Excel:", error);
+      toast.dismiss();
       toast.error("Error al leer el archivo Excel");
     }
     
@@ -115,6 +257,12 @@ export const DataImport = () => {
     const data = importedData[type];
     if (!data || data.length === 0) {
       toast.error("No hay datos para importar. Primero carga un archivo Excel.");
+      return;
+    }
+
+    const diagnostic = diagnostics[type];
+    if (diagnostic?.hasErrors) {
+      toast.error("No se puede importar. El archivo tiene errores críticos. Corrígelos y vuelve a cargar el archivo.");
       return;
     }
 
@@ -265,6 +413,33 @@ export const DataImport = () => {
 
             {importedData.clientes && importedData.clientes.length > 0 && (
               <div className="space-y-3">
+                {diagnostics.clientes && (
+                  <Alert variant={diagnostics.clientes.hasErrors ? "destructive" : diagnostics.clientes.hasWarnings ? "default" : "default"} className="mb-4">
+                    <AlertTriangle className="h-4 w-4" />
+                    <AlertTitle>Diagnóstico del Archivo</AlertTitle>
+                    <AlertDescription className="space-y-1 text-sm">
+                      <p><strong>Total de registros:</strong> {diagnostics.clientes.totalRows.toLocaleString()}</p>
+                      {diagnostics.clientes.invalidRows > 0 && (
+                        <p className="text-destructive"><strong>⚠️ Filas inválidas:</strong> {diagnostics.clientes.invalidRows} (faltan campos requeridos)</p>
+                      )}
+                      {diagnostics.clientes.duplicatesInFile > 0 && (
+                        <p className="text-yellow-600"><strong>⚠️ Duplicados en el archivo:</strong> {diagnostics.clientes.duplicatesInFile}</p>
+                      )}
+                      {diagnostics.clientes.duplicatesInDB > 0 && (
+                        <p className="text-yellow-600"><strong>⚠️ Códigos que ya existen en la BD:</strong> {diagnostics.clientes.duplicatesInDB} (primeros 100 verificados)</p>
+                      )}
+                      {diagnostics.clientes.missingColumns.length > 0 && (
+                        <p className="text-destructive"><strong>❌ Columnas faltantes:</strong> {diagnostics.clientes.missingColumns.join(", ")}</p>
+                      )}
+                      {diagnostics.clientes.extraColumns.length > 0 && (
+                        <p className="text-muted-foreground"><strong>ℹ️ Columnas extra (se ignorarán):</strong> {diagnostics.clientes.extraColumns.join(", ")}</p>
+                      )}
+                      {!diagnostics.clientes.hasErrors && !diagnostics.clientes.hasWarnings && (
+                        <p className="text-green-600 flex items-center gap-2"><CheckCircle className="h-4 w-4" /> Archivo válido, listo para importar</p>
+                      )}
+                    </AlertDescription>
+                  </Alert>
+                )}
                 <p className="text-sm font-medium text-foreground">
                   {importedData.clientes.length.toLocaleString()} registros listos para importar
                 </p>
@@ -279,7 +454,7 @@ export const DataImport = () => {
                 )}
                 <Button
                   onClick={() => importToDatabase("clientes")}
-                  disabled={uploading}
+                  disabled={uploading || diagnostics.clientes?.hasErrors}
                   className="gap-2"
                 >
                   <Upload className="h-4 w-4" />
@@ -319,6 +494,27 @@ export const DataImport = () => {
 
             {importedData.marcas && importedData.marcas.length > 0 && (
               <div className="space-y-3">
+                {diagnostics.marcas && (
+                  <Alert variant={diagnostics.marcas.hasErrors ? "destructive" : diagnostics.marcas.hasWarnings ? "default" : "default"} className="mb-4">
+                    <AlertTriangle className="h-4 w-4" />
+                    <AlertTitle>Diagnóstico del Archivo</AlertTitle>
+                    <AlertDescription className="space-y-1 text-sm">
+                      <p><strong>Total de registros:</strong> {diagnostics.marcas.totalRows.toLocaleString()}</p>
+                      {diagnostics.marcas.invalidRows > 0 && (
+                        <p className="text-destructive"><strong>⚠️ Filas inválidas:</strong> {diagnostics.marcas.invalidRows}</p>
+                      )}
+                      {diagnostics.marcas.duplicatesInFile > 0 && (
+                        <p className="text-yellow-600"><strong>⚠️ Duplicados en el archivo:</strong> {diagnostics.marcas.duplicatesInFile}</p>
+                      )}
+                      {diagnostics.marcas.duplicatesInDB > 0 && (
+                        <p className="text-yellow-600"><strong>⚠️ Códigos que ya existen en la BD:</strong> {diagnostics.marcas.duplicatesInDB}</p>
+                      )}
+                      {!diagnostics.marcas.hasErrors && !diagnostics.marcas.hasWarnings && (
+                        <p className="text-green-600 flex items-center gap-2"><CheckCircle className="h-4 w-4" /> Archivo válido</p>
+                      )}
+                    </AlertDescription>
+                  </Alert>
+                )}
                 <p className="text-sm font-medium text-foreground">
                   {importedData.marcas.length.toLocaleString()} registros listos para importar
                 </p>
@@ -333,7 +529,7 @@ export const DataImport = () => {
                 )}
                 <Button
                   onClick={() => importToDatabase("marcas")}
-                  disabled={uploading}
+                  disabled={uploading || diagnostics.marcas?.hasErrors}
                   className="gap-2"
                 >
                   <Upload className="h-4 w-4" />
@@ -373,6 +569,27 @@ export const DataImport = () => {
 
             {importedData.vendedores && importedData.vendedores.length > 0 && (
               <div className="space-y-3">
+                {diagnostics.vendedores && (
+                  <Alert variant={diagnostics.vendedores.hasErrors ? "destructive" : diagnostics.vendedores.hasWarnings ? "default" : "default"} className="mb-4">
+                    <AlertTriangle className="h-4 w-4" />
+                    <AlertTitle>Diagnóstico del Archivo</AlertTitle>
+                    <AlertDescription className="space-y-1 text-sm">
+                      <p><strong>Total de registros:</strong> {diagnostics.vendedores.totalRows.toLocaleString()}</p>
+                      {diagnostics.vendedores.invalidRows > 0 && (
+                        <p className="text-destructive"><strong>⚠️ Filas inválidas:</strong> {diagnostics.vendedores.invalidRows}</p>
+                      )}
+                      {diagnostics.vendedores.duplicatesInFile > 0 && (
+                        <p className="text-yellow-600"><strong>⚠️ Duplicados en el archivo:</strong> {diagnostics.vendedores.duplicatesInFile}</p>
+                      )}
+                      {diagnostics.vendedores.duplicatesInDB > 0 && (
+                        <p className="text-yellow-600"><strong>⚠️ Códigos que ya existen en la BD:</strong> {diagnostics.vendedores.duplicatesInDB}</p>
+                      )}
+                      {!diagnostics.vendedores.hasErrors && !diagnostics.vendedores.hasWarnings && (
+                        <p className="text-green-600 flex items-center gap-2"><CheckCircle className="h-4 w-4" /> Archivo válido</p>
+                      )}
+                    </AlertDescription>
+                  </Alert>
+                )}
                 <p className="text-sm font-medium text-foreground">
                   {importedData.vendedores.length.toLocaleString()} registros listos para importar
                 </p>
@@ -387,7 +604,7 @@ export const DataImport = () => {
                 )}
                 <Button
                   onClick={() => importToDatabase("vendedores")}
-                  disabled={uploading}
+                  disabled={uploading || diagnostics.vendedores?.hasErrors}
                   className="gap-2"
                 >
                   <Upload className="h-4 w-4" />
@@ -428,6 +645,24 @@ export const DataImport = () => {
 
             {importedData.ventas && importedData.ventas.length > 0 && (
               <div className="space-y-3">
+                {diagnostics.ventas && (
+                  <Alert variant={diagnostics.ventas.hasErrors ? "destructive" : diagnostics.ventas.hasWarnings ? "default" : "default"} className="mb-4">
+                    <AlertTriangle className="h-4 w-4" />
+                    <AlertTitle>Diagnóstico del Archivo</AlertTitle>
+                    <AlertDescription className="space-y-1 text-sm">
+                      <p><strong>Total de registros:</strong> {diagnostics.ventas.totalRows.toLocaleString()}</p>
+                      {diagnostics.ventas.invalidRows > 0 && (
+                        <p className="text-destructive"><strong>⚠️ Filas inválidas:</strong> {diagnostics.ventas.invalidRows}</p>
+                      )}
+                      {diagnostics.ventas.duplicatesInDB > 0 && (
+                        <p className="text-yellow-600"><strong>⚠️ Registros duplicados en BD:</strong> {diagnostics.ventas.duplicatesInDB} (primeros 100 verificados)</p>
+                      )}
+                      {!diagnostics.ventas.hasErrors && !diagnostics.ventas.hasWarnings && (
+                        <p className="text-green-600 flex items-center gap-2"><CheckCircle className="h-4 w-4" /> Archivo válido</p>
+                      )}
+                    </AlertDescription>
+                  </Alert>
+                )}
                 <p className="text-sm font-medium text-foreground">
                   {importedData.ventas.length.toLocaleString()} registros listos para importar
                 </p>
@@ -442,7 +677,7 @@ export const DataImport = () => {
                 )}
                 <Button
                   onClick={() => importToDatabase("ventas")}
-                  disabled={uploading}
+                  disabled={uploading || diagnostics.ventas?.hasErrors}
                   className="gap-2"
                 >
                   <Upload className="h-4 w-4" />
