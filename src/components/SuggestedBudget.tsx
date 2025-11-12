@@ -2,11 +2,19 @@ import { useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+//import { Checkbox } from "@/components/ui/checkbox";
+import { Sparkles, Download, Check } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
-import { Sparkles, Download } from "lucide-react";
+//import { Sparkles, Download } from "lucide-react";
 import * as XLSX from "xlsx";
 
 interface SuggestedBudgetProps {
@@ -28,28 +36,32 @@ interface SuggestedBudgetProps {
     empresa: string;
     venta: number;
   }>;
-  onApplySuggestion: (marcas: Array<{ marca: string; fechaDestino: string; empresa: string; presupuesto: number }>) => void;
+  onApplySuggestion: (
+    marcas: Array<{ marca: string; fechaDestino: string; empresa: string; presupuesto: number }>,
+  ) => void;
 }
 
-export const SuggestedBudget = ({ 
-  historicalData, 
-  marcasDisponibles, 
-  empresasDisponibles, 
+export const SuggestedBudget = ({
+  historicalData,
+  marcasDisponibles,
+  empresasDisponibles,
   mesesDisponibles,
   ventasData,
-  onApplySuggestion 
+  onApplySuggestion,
 }: SuggestedBudgetProps) => {
   const [totalBudget, setTotalBudget] = useState<string>("");
   const [targetDate, setTargetDate] = useState<string>("");
   const [selectedMeses, setSelectedMeses] = useState<string[]>([]);
-  const [suggestedDistribution, setSuggestedDistribution] = useState<Array<{ marca: string; empresa: string; porcentaje: number; monto: number; promedioVenta: number }>>([]);
+  const [suggestedDistribution, setSuggestedDistribution] = useState<
+    Array<{ marca: string; empresa: string; porcentaje: number; monto: number; promedioVenta: number }>
+  >([]);
   const [isOpen, setIsOpen] = useState(false);
 
   // Convert date format to month-year format (e.g., "diciembre-2024")
   const convertDateToMesAnio = (dateStr: string): string => {
     // Handle both YYYY/MM/DD and YYYY-MM-DD formats
-    const cleanDate = dateStr.replace(/\//g, '-');
-    const [year, month, day] = cleanDate.split('-').map(Number);
+    const cleanDate = dateStr.replace(/\//g, "-");
+    const [year, month, day] = cleanDate.split("-").map(Number);
     const date = new Date(year, month - 1, day);
     const mes = date.toLocaleString("es-ES", { month: "long" });
     const anio = date.getFullYear();
@@ -62,32 +74,35 @@ export const SuggestedBudget = ({
     console.log("Meses seleccionados:", selectedMeses);
     console.log("Total datos históricos:", historicalData.length);
     console.log("Datos históricos completos:", historicalData);
-    
+
     if (selectedMeses.length === 0) return [];
-    
+
     // Log sample of dates to see format
     if (historicalData.length > 0) {
-      console.log("Muestra de fechas originales:", historicalData.slice(0, 3).map(d => d.fechaDestino));
-      console.log("Muestra de fechas convertidas:", historicalData.slice(0, 3).map(d => convertDateToMesAnio(d.fechaDestino)));
+      console.log(
+        "Muestra de fechas originales:",
+        historicalData.slice(0, 3).map((d) => d.fechaDestino),
+      );
+      console.log(
+        "Muestra de fechas convertidas:",
+        historicalData.slice(0, 3).map((d) => convertDateToMesAnio(d.fechaDestino)),
+      );
     }
-    
-    const filtered = historicalData.filter(item => {
+
+    const filtered = historicalData.filter((item) => {
       const itemMesAnio = convertDateToMesAnio(item.fechaDestino);
       const matches = selectedMeses.includes(itemMesAnio) && item.presupuesto > 0;
       return matches;
     });
-    
+
     console.log("Datos después del filtro:", filtered.length);
-    console.log("Empresas en datos filtrados:", [...new Set(filtered.map(d => d.empresa))]);
-    
+    console.log("Empresas en datos filtrados:", [...new Set(filtered.map((d) => d.empresa))]);
+
     return filtered;
   }, [historicalData, selectedMeses]);
 
-
   const handleMesToggle = (mes: string) => {
-    setSelectedMeses(prev => 
-      prev.includes(mes) ? prev.filter(m => m !== mes) : [...prev, mes]
-    );
+    setSelectedMeses((prev) => (prev.includes(mes) ? prev.filter((m) => m !== mes) : [...prev, mes]));
     // Reset distribution when months change
     setSuggestedDistribution([]);
   };
@@ -120,11 +135,11 @@ export const SuggestedBudget = ({
     // Calculate average sales from ventasData using the same formula as main calculation
     // Promedio = Σ(Ventas en Meses de Referencia) / Cantidad de Meses de Referencia
     const brandEmpresaData = new Map<string, { empresa: string; totalVentas: number; totalPresupuesto: number }>();
-    
+
     // First, get sales data from ventasData for selected months and available brands
-    const ventasMesesSeleccionados = ventasData.filter(v => selectedMeses.includes(v.mesAnio));
-    
-    ventasMesesSeleccionados.forEach(venta => {
+    const ventasMesesSeleccionados = ventasData.filter((v) => selectedMeses.includes(v.mesAnio));
+
+    ventasMesesSeleccionados.forEach((venta) => {
       const key = `${venta.marca}|${venta.empresa}`;
       const current = brandEmpresaData.get(key);
       if (current) {
@@ -135,7 +150,7 @@ export const SuggestedBudget = ({
     });
 
     // Add historical budget data
-    filteredHistoricalData.forEach(item => {
+    filteredHistoricalData.forEach((item) => {
       const key = `${item.marca}|${item.empresa}`;
       const current = brandEmpresaData.get(key);
       if (current) {
@@ -151,7 +166,7 @@ export const SuggestedBudget = ({
     const validBrands = Array.from(brandEmpresaData.entries())
       .filter(([_, data]) => data.totalPresupuesto > 0 && data.totalVentas > 0)
       .map(([key, data]) => {
-        const [marca] = key.split('|');
+        const [marca] = key.split("|");
         const promedioVenta = data.totalVentas / selectedMeses.length; // Promedio = Σ(Ventas) / Cantidad de Meses
         return { marca, empresa: data.empresa, total: data.totalPresupuesto, promedioVenta };
       });
@@ -165,7 +180,7 @@ export const SuggestedBudget = ({
 
     // Calculate percentage participation and suggested amounts
     const distribution = validBrands
-      .map(item => {
+      .map((item) => {
         const porcentaje = (item.total / totalHistorical) * 100;
         const monto = (budget * porcentaje) / 100;
         return { marca: item.marca, empresa: item.empresa, porcentaje, monto, promedioVenta: item.promedioVenta };
@@ -173,16 +188,18 @@ export const SuggestedBudget = ({
       .sort((a, b) => b.porcentaje - a.porcentaje);
 
     setSuggestedDistribution(distribution);
-    
+
     // Show average sales info
     const promedioTotal = validBrands.reduce((sum, item) => sum + item.promedioVenta, 0);
     const promedioGeneral = promedioTotal / validBrands.length;
-    
+
     toast.success(`Presupuesto distribuido entre ${distribution.length} marcas`);
-    toast.info(`Promedio de ventas en meses seleccionados: $${promedioGeneral.toLocaleString("es-ES", {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    })}`);
+    toast.info(
+      `Promedio de ventas en meses seleccionados: $${promedioGeneral.toLocaleString("es-ES", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      })}`,
+    );
   };
 
   const handleApply = () => {
@@ -191,11 +208,11 @@ export const SuggestedBudget = ({
       return;
     }
 
-    const marcasPresupuesto = suggestedDistribution.map(item => ({
+    const marcasPresupuesto = suggestedDistribution.map((item) => ({
       marca: item.marca,
       fechaDestino: targetDate,
       empresa: item.empresa,
-      presupuesto: item.monto
+      presupuesto: item.monto,
     }));
 
     onApplySuggestion(marcasPresupuesto);
@@ -210,12 +227,12 @@ export const SuggestedBudget = ({
       return;
     }
 
-    const excelData = suggestedDistribution.map(item => ({
+    const excelData = suggestedDistribution.map((item) => ({
       Marca: item.marca,
       Empresa: item.empresa,
       Fecha: targetDate,
       Presupuesto: item.monto,
-      Porcentaje: `${item.porcentaje.toFixed(2)}%`
+      Porcentaje: `${item.porcentaje.toFixed(2)}%`,
     }));
 
     const worksheet = XLSX.utils.json_to_sheet(excelData);
@@ -248,14 +265,51 @@ export const SuggestedBudget = ({
             Presupuesto Sugerido por Marca
           </DialogTitle>
           <DialogDescription>
-            Seleccione los meses de referencia y la distribución se calculará automáticamente basándose en el comportamiento histórico
+            Seleccione los meses de referencia y la distribución se calculará automáticamente basándose en el
+            comportamiento histórico
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-4">
           {/* Months selection */}
           <div className="space-y-2">
-            <Label className="text-base font-semibold">Meses de Referencia *</Label>
+            {/* <Label className="text-base font-semibold">Meses de Referencia *</Label> */}
+            <div className="flex items-center justify-between">
+              <Label className="text-base font-semibold">Meses de Referencia *</Label>
+              {selectedMeses.length > 0 && (
+                <Button variant="ghost" size="sm" onClick={() => setSelectedMeses([])}>
+                  Limpiar
+                </Button>
+              )}
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 max-h-48 overflow-y-auto">
+              {mesesDisponibles.map((mes) => {
+                const selected = selectedMeses.includes(mes);
+                return (
+                  <button
+                    key={mes}
+                    type="button"
+                    onClick={() => handleMesToggle(mes)}
+                    aria-pressed={selected}
+                    className={[
+                      "relative w-full rounded-xl border px-3 py-2 text-sm font-medium text-left transition",
+                      "focus:outline-none focus:ring-2 focus:ring-offset-2",
+                      selected ? "border-primary bg-primary/5 ring-primary" : "border-muted hover:border-foreground/40",
+                    ].join(" ")}
+                  >
+                    <span className="block truncate pr-6">{mes}</span>
+                    {selected && <Check className="absolute top-2 right-2 h-4 w-4" />}
+                  </button>
+                );
+              })}
+            </div>
+            {selectedMeses.length > 0 && (
+              <p className="text-sm text-muted-foreground">
+                {selectedMeses.length} {selectedMeses.length === 1 ? "mes seleccionado" : "meses seleccionados"}
+              </p>
+            )}{" "}
+            /*para mejorar el formato de los botones*/
+            {/* <Label className="text-base font-semibold">Meses de Referencia *</Label>
             <div className="grid grid-cols-3 gap-2 max-h-48 overflow-y-auto border rounded-md p-3">
               {mesesDisponibles.map((mes) => (
                 <div key={mes} className="flex items-center space-x-2">
@@ -277,7 +331,7 @@ export const SuggestedBudget = ({
               <p className="text-sm text-muted-foreground">
                 {selectedMeses.length} {selectedMeses.length === 1 ? 'mes seleccionado' : 'meses seleccionados'}
               </p>
-            )}
+            )} */}
           </div>
 
           {/* Show inputs only if months are selected */}
@@ -337,18 +391,18 @@ export const SuggestedBudget = ({
                         <TableCell className="font-medium">
                           {item.marca}
                           <div className="text-xs text-muted-foreground">
-                            Promedio: ${item.promedioVenta.toLocaleString("es-ES", {
+                            Promedio: $
+                            {item.promedioVenta.toLocaleString("es-ES", {
                               minimumFractionDigits: 2,
                               maximumFractionDigits: 2,
                             })}
                           </div>
                         </TableCell>
                         <TableCell>{item.empresa}</TableCell>
+                        <TableCell className="text-right">{item.porcentaje.toFixed(2)}%</TableCell>
                         <TableCell className="text-right">
-                          {item.porcentaje.toFixed(2)}%
-                        </TableCell>
-                        <TableCell className="text-right">
-                          ${item.monto.toLocaleString("es-ES", {
+                          $
+                          {item.monto.toLocaleString("es-ES", {
                             minimumFractionDigits: 2,
                             maximumFractionDigits: 2,
                           })}
@@ -359,7 +413,8 @@ export const SuggestedBudget = ({
                       <TableCell colSpan={2}>Total</TableCell>
                       <TableCell className="text-right">100.00%</TableCell>
                       <TableCell className="text-right">
-                        ${parseFloat(totalBudget).toLocaleString("es-ES", {
+                        $
+                        {parseFloat(totalBudget).toLocaleString("es-ES", {
                           minimumFractionDigits: 2,
                           maximumFractionDigits: 2,
                         })}
