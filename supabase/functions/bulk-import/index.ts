@@ -87,33 +87,11 @@ serve(async (req) => {
 
     console.log(`Created job ${job.id} for ${jsonData.length} rows`);
 
-    // Insertar datos en staging en lotes
-    const BATCH_SIZE = 5000;
-    let stagingInserted = 0;
+    // Iniciar procesamiento en background inmediatamente
+    // No esperar - responder al cliente de inmediato
+    insertAndProcessData(supabaseClient, job.id, jsonData, type, user.id);
 
-    for (let i = 0; i < jsonData.length; i += BATCH_SIZE) {
-      const batch = jsonData.slice(i, i + BATCH_SIZE);
-      const stagingBatch = batch.map((item: any) => ({
-        job_id: job.id,
-        row_data: item
-      }));
-
-      const { error: stagingError } = await supabaseClient
-        .from('import_staging')
-        .insert(stagingBatch);
-
-      if (stagingError) {
-        console.error('Error inserting staging batch:', stagingError);
-      } else {
-        stagingInserted += batch.length;
-      }
-    }
-
-    console.log(`Inserted ${stagingInserted} rows into staging`);
-
-    // Iniciar procesamiento en background (no await)
-    processImportJob(supabaseClient, job.id, type, user.id);
-
+    // Respuesta inmediata al cliente
     return new Response(
       JSON.stringify({
         success: true,
@@ -135,30 +113,56 @@ serve(async (req) => {
   }
 });
 
-// Procesar job en background
-async function processImportJob(
+// Insertar en staging y procesar en background
+async function insertAndProcessData(
   supabase: any,
   jobId: string,
+  jsonData: any[],
   type: string,
   userId: string
 ) {
   try {
-    console.log(`Starting background processing for job ${jobId}`);
+    console.log(`Starting data insertion for job ${jobId}`);
 
+    // Insertar en staging en lotes grandes (10K por lote para reducir round-trips)
+    const STAGING_BATCH_SIZE = 10000;
+    
+    for (let i = 0; i < jsonData.length; i += STAGING_BATCH_SIZE) {
+      const batch = jsonData.slice(i, i + STAGING_BATCH_SIZE);
+      const stagingBatch = batch.map((item: any) => ({
+        job_id: jobId,
+        row_data: item
+      }));
+
+      const { error: stagingError } = await supabase
+        .from('import_staging')
+        .insert(stagingBatch);
+
+      if (stagingError) {
+        console.error('Error inserting staging batch:', stagingError);
+        throw stagingError;
+      }
+      
+      console.log(`Inserted batch ${i / STAGING_BATCH_SIZE + 1}, ${Math.min(i + STAGING_BATCH_SIZE, jsonData.length)}/${jsonData.length} rows`);
+    }
+
+    console.log(`All data inserted to staging for job ${jobId}, starting processing`);
+
+    // Actualizar estado a processing
     await supabase
       .from('import_jobs')
       .update({ status: 'processing' })
       .eq('id', jobId);
 
-    // Procesar en lotes usando la función de base de datos
+    // Procesar en lotes desde staging a tablas finales
     let hasMore = true;
-    const BATCH_SIZE = 1000;
+    const PROCESS_BATCH_SIZE = 2000; // Lotes más grandes para procesar más rápido
 
     while (hasMore) {
       const { data: result, error } = await supabase
         .rpc('process_import_batch', {
           p_job_id: jobId,
-          p_batch_size: BATCH_SIZE
+          p_batch_size: PROCESS_BATCH_SIZE
         });
 
       if (error) {
