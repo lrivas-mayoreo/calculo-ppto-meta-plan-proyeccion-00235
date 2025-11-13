@@ -223,12 +223,12 @@ export const DataImport = () => {
       const excelBuffer = XLSX.write(wb, { type: 'array', bookType: 'xlsx' });
       const blob = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
 
-      // Enviar al edge function
+      // Enviar al edge function (solo carga a staging)
       const formData = new FormData();
       formData.append('file', blob, `${type}.xlsx`);
       formData.append('type', type);
 
-      setUploadProgress(20);
+      setUploadProgress(10);
 
       const response = await supabase.functions.invoke('bulk-import', {
         body: formData,
@@ -245,70 +245,88 @@ export const DataImport = () => {
       }
 
       const jobId = result.jobId;
-      toast.success(`Importación iniciada: ${result.totalRows.toLocaleString()} registros`);
+      const totalRows = result.totalRows;
+      toast.success(`Datos cargados: ${totalRows.toLocaleString()} registros. Procesando...`);
       
-      setUploadProgress(40);
+      setUploadProgress(20);
 
-      // Polling del estado del job
+      // Procesar lotes hasta completar
+      let hasMore = true;
       let attempts = 0;
-      const maxAttempts = 600; // 10 minutos máximo (1 segundo por intento)
-      
-      const checkJobStatus = async (): Promise<void> => {
-        if (attempts >= maxAttempts) {
-          throw new Error('Tiempo de espera agotado. La importación continúa en segundo plano.');
+      const maxAttempts = 200; // Máximo de lotes
+
+      while (hasMore && attempts < maxAttempts) {
+        attempts++;
+
+        const { data: batchResult, error: batchError } = await supabase.functions.invoke('process-import-batch', {
+          body: { jobId, batchSize: 3000 }
+        });
+
+        if (batchError) {
+          throw new Error(`Error procesando lote: ${batchError.message}`);
         }
 
-        const { data: job, error: jobError } = await supabase
+        hasMore = batchResult.hasMore;
+
+        // Actualizar progreso basado en el job
+        const { data: job } = await supabase
           .from('import_jobs')
-          .select('*')
+          .select('processed_rows, total_rows, status')
           .eq('id', jobId)
           .single();
 
-        if (jobError) throw jobError;
-
-        // Calcular progreso
-        const progress = job.total_rows > 0 
-          ? 40 + Math.floor((job.processed_rows / job.total_rows) * 60)
-          : 40;
-        setUploadProgress(progress);
-
-        if (job.status === 'completed') {
-          setUploadProgress(100);
-          toast.success(
-            `¡Importación completada! ${job.success_count.toLocaleString()} registros exitosos${
-              job.error_count > 0 ? `, ${job.error_count} errores` : ''
-            }`
-          );
+        if (job) {
+          if (job.status === 'failed') {
+            throw new Error('El procesamiento falló en el servidor');
+          }
           
-          // Limpiar datos después de importar exitosamente
-          const clearedData = { ...importedData };
-          delete clearedData[type];
-          setImportedData(clearedData);
-          
-          // Limpiar diagnóstico
-          const clearedDiagnostics = { ...diagnostics };
-          delete clearedDiagnostics[type];
-          setDiagnostics(clearedDiagnostics);
-          return;
+          const progress = 20 + (job.processed_rows / job.total_rows) * 75;
+          setUploadProgress(Math.min(Math.floor(progress), 99));
         }
 
-        if (job.status === 'failed') {
-          throw new Error(job.error_message || 'Error en la importación');
+        // Pequeña pausa
+        if (hasMore) {
+          await new Promise(resolve => setTimeout(resolve, 100));
         }
+      }
 
-        // Continuar polling
-        attempts++;
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        return checkJobStatus();
-      };
+      if (attempts >= maxAttempts) {
+        throw new Error('Se alcanzó el límite de lotes. Por favor, contacta soporte.');
+      }
 
-      await checkJobStatus();
+      // Verificar resultado final
+      const { data: finalJob } = await supabase
+        .from('import_jobs')
+        .select('*')
+        .eq('id', jobId)
+        .single();
+
+      if (finalJob?.status === 'completed') {
+        setUploadProgress(100);
+        toast.success(
+          `¡Importación completada! ${finalJob.success_count.toLocaleString()} registros exitosos${
+            finalJob.error_count > 0 ? `, ${finalJob.error_count} errores` : ''
+          }`
+        );
+        
+        // Limpiar datos
+        const clearedData = { ...importedData };
+        delete clearedData[type];
+        setImportedData(clearedData);
+        
+        const clearedDiagnostics = { ...diagnostics };
+        delete clearedDiagnostics[type];
+        setDiagnostics(clearedDiagnostics);
+      } else {
+        throw new Error(finalJob?.error_message || 'Error desconocido');
+      }
+
     } catch (error) {
       console.error("Error:", error);
-      toast.error(`Error al importar datos: ${(error as Error).message || String(error)}`);
+      toast.error(`Error en la importación: ${(error as Error).message}`);
     } finally {
       setUploading(false);
-      setTimeout(() => setUploadProgress(0), 1000);
+      setUploadProgress(0);
     }
   };
 
