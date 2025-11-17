@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Upload, Download, FileSpreadsheet, AlertTriangle, CheckCircle } from "lucide-react";
 import * as XLSX from "xlsx";
+import LZString from "lz-string";
 
 interface ImportedData {
   clientes?: Array<{ codigo: string; nombre: string }>;
@@ -43,15 +44,15 @@ export const DataImport = () => {
     const cachedData = sessionStorage.getItem(CACHE_KEY);
     const cachedDiagnostics = sessionStorage.getItem(DIAGNOSTICS_KEY);
     
-    // Solo mostramos que había datos, pero no los cargamos (archivos grandes)
     if (cachedData) {
       try {
-        const parsed = JSON.parse(cachedData);
-        // Solo verificamos si hay metadatos, no cargamos los datos completos
-        if (Object.keys(parsed).length > 0) {
-          toast.info("Sesión anterior detectada. Por favor, recarga el archivo Excel si deseas continuar.");
+        // Descomprimir y parsear datos
+        const decompressed = LZString.decompressFromUTF16(cachedData);
+        if (decompressed) {
+          const parsed = JSON.parse(decompressed);
+          setImportedData(parsed);
+          toast.info("Datos recuperados de la sesión anterior");
         }
-        sessionStorage.removeItem(CACHE_KEY);
       } catch (error) {
         console.error("Error recuperando datos de caché:", error);
         sessionStorage.removeItem(CACHE_KEY);
@@ -60,8 +61,13 @@ export const DataImport = () => {
     
     if (cachedDiagnostics) {
       try {
-        const parsed = JSON.parse(cachedDiagnostics);
-        setDiagnostics(parsed);
+        // Descomprimir y parsear diagnósticos
+        const decompressed = LZString.decompressFromUTF16(cachedDiagnostics);
+        if (decompressed) {
+          const parsed = JSON.parse(decompressed);
+          setDiagnostics(parsed);
+          toast.info("Diagnósticos recuperados de la sesión anterior");
+        }
       } catch (error) {
         console.error("Error recuperando diagnósticos de caché:", error);
         sessionStorage.removeItem(DIAGNOSTICS_KEY);
@@ -69,21 +75,14 @@ export const DataImport = () => {
     }
   }, []);
 
-  // Guardar en sessionStorage cuando cambien los datos (con manejo de errores)
+  // Guardar en sessionStorage cuando cambien los datos (con compresión LZ-string)
   useEffect(() => {
     if (Object.keys(importedData).length > 0) {
       try {
-        // Intentar guardar solo metadatos para evitar exceder cuota
-        const metadata = Object.keys(importedData).reduce((acc, key) => {
-          const data = importedData[key as keyof ImportedData];
-          acc[key] = {
-            rowCount: data?.length || 0,
-            hasData: true
-          };
-          return acc;
-        }, {} as Record<string, any>);
-        
-        sessionStorage.setItem(CACHE_KEY, JSON.stringify(metadata));
+        // Comprimir datos antes de guardar
+        const jsonString = JSON.stringify(importedData);
+        const compressed = LZString.compressToUTF16(jsonString);
+        sessionStorage.setItem(CACHE_KEY, compressed);
       } catch (error) {
         // Si falla (QuotaExceededError), simplemente no cachear
         console.warn("No se pudo cachear datos en sessionStorage:", error);
@@ -94,11 +93,14 @@ export const DataImport = () => {
     }
   }, [importedData]);
 
-  // Guardar diagnósticos en sessionStorage (con manejo de errores)
+  // Guardar diagnósticos en sessionStorage (con compresión LZ-string)
   useEffect(() => {
     if (Object.keys(diagnostics).length > 0) {
       try {
-        sessionStorage.setItem(DIAGNOSTICS_KEY, JSON.stringify(diagnostics));
+        // Comprimir diagnósticos antes de guardar
+        const jsonString = JSON.stringify(diagnostics);
+        const compressed = LZString.compressToUTF16(jsonString);
+        sessionStorage.setItem(DIAGNOSTICS_KEY, compressed);
       } catch (error) {
         console.warn("No se pudo cachear diagnósticos en sessionStorage:", error);
         sessionStorage.removeItem(DIAGNOSTICS_KEY);
