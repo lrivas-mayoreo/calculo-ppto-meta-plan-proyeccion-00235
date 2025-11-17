@@ -57,6 +57,20 @@ serve(async (req) => {
     });
 
     console.log(`Parsed ${jsonData.length} rows from Excel`);
+    
+    // Normalizar nombres de columnas y validar campos requeridos
+    const normalizedData = normalizeAndValidateData(jsonData, type);
+    
+    if (normalizedData.length === 0) {
+      return new Response(
+        JSON.stringify({ 
+          error: `No se encontraron columnas válidas. Campos esperados: ${getExpectedColumns(type).join(', ')}` 
+        }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+    
+    console.log(`Normalized ${normalizedData.length} valid rows`);
 
     if (!jsonData || jsonData.length === 0) {
       return new Response(
@@ -72,7 +86,7 @@ serve(async (req) => {
         user_id: user.id,
         type: type,
         status: 'pending',
-        total_rows: jsonData.length
+        total_rows: normalizedData.length
       })
       .select()
       .single();
@@ -85,18 +99,18 @@ serve(async (req) => {
       );
     }
 
-    console.log(`Created job ${job.id} for ${jsonData.length} rows`);
+    console.log(`Created job ${job.id} for ${normalizedData.length} rows`);
 
     // Iniciar procesamiento en background inmediatamente
     // No esperar - responder al cliente de inmediato
-    insertAndProcessData(supabaseClient, job.id, jsonData, type, user.id);
+    insertAndProcessData(supabaseClient, job.id, normalizedData, type, user.id);
 
     // Respuesta inmediata al cliente
     return new Response(
       JSON.stringify({
         success: true,
         jobId: job.id,
-        totalRows: jsonData.length
+        totalRows: normalizedData.length
       }),
       {
         status: 200,
@@ -216,4 +230,96 @@ async function insertAndProcessData(
       })
       .eq('id', jobId);
   }
+}
+
+// Funciones auxiliares para normalización y validación
+function normalizeColumnName(name: string): string {
+  return name
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '') // Eliminar acentos
+    .replace(/\s+/g, '_')
+    .replace(/[^a-z0-9_]/g, '');
+}
+
+function getExpectedColumns(type: string): string[] {
+  const columns: Record<string, string[]> = {
+    clientes: ['codigo', 'nombre'],
+    marcas: ['codigo', 'nombre'],
+    vendedores: ['codigo', 'nombre'],
+    ventas: ['codigo_cliente', 'codigo_marca', 'codigo_vendedor', 'mes', 'monto']
+  };
+  return columns[type] || [];
+}
+
+function normalizeAndValidateData(data: any[], type: string): any[] {
+  if (!data || data.length === 0) return [];
+  
+  const expectedColumns = getExpectedColumns(type);
+  const normalized: any[] = [];
+  
+  for (const row of data) {
+    const normalizedRow: any = {};
+    let hasAllRequired = true;
+    
+    // Mapear columnas del Excel a nombres normalizados
+    for (const [key, value] of Object.entries(row)) {
+      const normalizedKey = normalizeColumnName(key as string);
+      
+      // Mapear variaciones comunes
+      const keyMappings: Record<string, string> = {
+        'cod': 'codigo',
+        'codigo_de_cliente': 'codigo_cliente',
+        'codigo_del_cliente': 'codigo_cliente',
+        'cliente': 'codigo_cliente',
+        'cod_cliente': 'codigo_cliente',
+        'codigo_de_marca': 'codigo_marca',
+        'codigo_de_la_marca': 'codigo_marca',
+        'marca': 'codigo_marca',
+        'cod_marca': 'codigo_marca',
+        'codigo_de_vendedor': 'codigo_vendedor',
+        'codigo_del_vendedor': 'codigo_vendedor',
+        'vendedor': 'codigo_vendedor',
+        'cod_vendedor': 'codigo_vendedor',
+        'nombre_del_cliente': 'nombre',
+        'nombre_de_la_marca': 'nombre',
+        'nombre_del_vendedor': 'nombre',
+        'razon_social': 'nombre',
+        'descripcion': 'nombre',
+        'fecha': 'mes',
+        'periodo': 'mes',
+        'importe': 'monto',
+        'valor': 'monto',
+        'venta': 'monto',
+        'total': 'monto'
+      };
+      
+      const finalKey = keyMappings[normalizedKey] || normalizedKey;
+      
+      if (expectedColumns.includes(finalKey)) {
+        // Validar y convertir tipos según sea necesario
+        if (finalKey === 'monto' && value !== null && value !== '') {
+          // Convertir monto a número, eliminar caracteres no numéricos
+          const numValue = String(value).replace(/[^0-9.-]/g, '');
+          normalizedRow[finalKey] = numValue;
+        } else if (value !== null && value !== '') {
+          normalizedRow[finalKey] = String(value).trim();
+        }
+      }
+    }
+    
+    // Verificar que tenga todos los campos requeridos
+    for (const col of expectedColumns) {
+      if (col !== 'codigo_vendedor' && !normalizedRow[col]) { // codigo_vendedor es opcional
+        hasAllRequired = false;
+        break;
+      }
+    }
+    
+    if (hasAllRequired) {
+      normalized.push(normalizedRow);
+    }
+  }
+  
+  return normalized;
 }
