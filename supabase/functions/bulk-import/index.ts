@@ -7,6 +7,16 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Declarar EdgeRuntime global
+declare const EdgeRuntime: {
+  waitUntil(promise: Promise<any>): void;
+} | undefined;
+
+// Log cuando el runtime está cerrándose
+addEventListener('beforeunload', (ev: any) => {
+  console.log('Edge function shutting down:', ev.detail?.reason);
+});
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -101,9 +111,18 @@ serve(async (req) => {
 
     console.log(`Created job ${job.id} for ${normalizedData.length} rows`);
 
-    // Iniciar procesamiento en background inmediatamente
-    // No esperar - responder al cliente de inmediato
-    insertAndProcessData(supabaseClient, job.id, normalizedData, type, user.id);
+    // Iniciar procesamiento en background con waitUntil para que el runtime espere
+    const backgroundTask = insertAndProcessData(supabaseClient, job.id, normalizedData, type, user.id);
+    
+    // Usar EdgeRuntime.waitUntil para asegurar que la tarea termine antes de cerrar
+    if (typeof EdgeRuntime !== 'undefined' && EdgeRuntime.waitUntil) {
+      EdgeRuntime.waitUntil(backgroundTask);
+      console.log('Background task registered with EdgeRuntime.waitUntil');
+    } else {
+      // Fallback: esperar la tarea si waitUntil no está disponible
+      console.warn('EdgeRuntime.waitUntil not available, awaiting task directly');
+      await backgroundTask;
+    }
 
     // Respuesta inmediata al cliente
     return new Response(
@@ -136,10 +155,11 @@ async function insertAndProcessData(
   userId: string
 ) {
   try {
-    console.log(`Starting data insertion for job ${jobId}`);
+    console.log(`[${jobId}] Starting data insertion for job with ${jsonData.length} rows`);
 
     // Insertar en staging en lotes grandes (10K por lote para reducir round-trips)
     const STAGING_BATCH_SIZE = 10000;
+    let totalInserted = 0;
     
     for (let i = 0; i < jsonData.length; i += STAGING_BATCH_SIZE) {
       const batch = jsonData.slice(i, i + STAGING_BATCH_SIZE);
@@ -148,19 +168,23 @@ async function insertAndProcessData(
         row_data: item
       }));
 
-      const { error: stagingError } = await supabase
+      console.log(`[${jobId}] Attempting to insert batch ${Math.floor(i / STAGING_BATCH_SIZE) + 1}, rows ${i}-${Math.min(i + STAGING_BATCH_SIZE, jsonData.length)}`);
+
+      const { error: stagingError, count } = await supabase
         .from('import_staging')
-        .insert(stagingBatch);
+        .insert(stagingBatch)
+        .select('id', { count: 'exact', head: true });
 
       if (stagingError) {
-        console.error('Error inserting staging batch:', stagingError);
+        console.error(`[${jobId}] Error inserting staging batch:`, stagingError);
         throw stagingError;
       }
       
-      console.log(`Inserted batch ${i / STAGING_BATCH_SIZE + 1}, ${Math.min(i + STAGING_BATCH_SIZE, jsonData.length)}/${jsonData.length} rows`);
+      totalInserted += batch.length;
+      console.log(`[${jobId}] Successfully inserted batch ${Math.floor(i / STAGING_BATCH_SIZE) + 1}, total: ${totalInserted}/${jsonData.length} rows`);
     }
 
-    console.log(`All data inserted to staging for job ${jobId}, starting processing`);
+    console.log(`[${jobId}] All ${totalInserted} rows inserted to staging, starting processing`);
 
     // Actualizar estado a processing
     await supabase
