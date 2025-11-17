@@ -116,19 +116,35 @@ export const DataImport = () => {
 
     switch (type) {
       case "clientes":
-        data = [{ codigo: "CLI001", nombre: "Cliente Ejemplo" }];
+        data = [
+          { codigo: "C001", nombre: "Cliente Ejemplo 1" },
+          { codigo: "C002", nombre: "Cliente Ejemplo 2" },
+          { codigo: "C003", nombre: "Cliente Ejemplo 3" }
+        ];
         filename = "plantilla_clientes.xlsx";
         break;
       case "marcas":
-        data = [{ codigo: "MAR001", nombre: "Marca Ejemplo" }];
+        data = [
+          { codigo: "M001", nombre: "Marca Ejemplo 1" },
+          { codigo: "M002", nombre: "Marca Ejemplo 2" },
+          { codigo: "M003", nombre: "Marca Ejemplo 3" }
+        ];
         filename = "plantilla_marcas.xlsx";
         break;
       case "vendedores":
-        data = [{ codigo: "VEN001", nombre: "Vendedor Ejemplo" }];
+        data = [
+          { codigo: "V001", nombre: "Vendedor Ejemplo 1" },
+          { codigo: "V002", nombre: "Vendedor Ejemplo 2" },
+          { codigo: "V003", nombre: "Vendedor Ejemplo 3" }
+        ];
         filename = "plantilla_vendedores.xlsx";
         break;
       case "ventas":
-        data = [{ codigo_cliente: "CLI001", codigo_marca: "MAR001", codigo_vendedor: "VEN001", mes: "enero-2025", monto: 10000 }];
+        data = [
+          { codigo_cliente: "C001", codigo_marca: "M001", codigo_vendedor: "V001", mes: "2024/01/31", monto: 15000 },
+          { codigo_cliente: "C001", codigo_marca: "M002", codigo_vendedor: "V001", mes: "2024/01/31", monto: 25000 },
+          { codigo_cliente: "C002", codigo_marca: "M001", codigo_vendedor: "V002", mes: "2024/01/31", monto: 18000 }
+        ];
         filename = "plantilla_ventas.xlsx";
         break;
     }
@@ -137,6 +153,8 @@ export const DataImport = () => {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Datos");
     XLSX.writeFile(wb, filename);
+    
+    toast.success(`Plantilla ${filename} descargada con nombres de columnas exactos`);
   };
 
   const validateExcel = (data: any[], type: string): { valid: boolean; missingColumns: string[]; extraColumns: string[] } => {
@@ -440,6 +458,17 @@ export const DataImport = () => {
         </TabsList>
 
         <TabsContent value="clientes" className="space-y-4">
+          <Alert className="mb-4">
+            <FileSpreadsheet className="h-4 w-4" />
+            <AlertTitle>Formato del Excel</AlertTitle>
+            <AlertDescription className="space-y-2">
+              <p><strong>Columnas requeridas exactas:</strong> <code>codigo</code> y <code>nombre</code></p>
+              <p className="text-sm text-muted-foreground">
+                Se aceptan variaciones como "Código", "COD", "Nombre del Cliente", etc., pero se recomienda usar la plantilla para evitar errores.
+              </p>
+            </AlertDescription>
+          </Alert>
+          
           <div className="space-y-4">
             <div className="flex items-center gap-4">
               <Button
@@ -515,6 +544,17 @@ export const DataImport = () => {
         </TabsContent>
 
         <TabsContent value="marcas" className="space-y-4">
+          <Alert className="mb-4">
+            <FileSpreadsheet className="h-4 w-4" />
+            <AlertTitle>Formato del Excel</AlertTitle>
+            <AlertDescription className="space-y-2">
+              <p><strong>Columnas requeridas exactas:</strong> <code>codigo</code> y <code>nombre</code></p>
+              <p className="text-sm text-muted-foreground">
+                Se aceptan variaciones como "Código", "COD", "Nombre de la Marca", etc., pero se recomienda usar la plantilla para evitar errores.
+              </p>
+            </AlertDescription>
+          </Alert>
+          
           <div className="space-y-4">
             <div className="flex items-center gap-4">
               <Button
@@ -590,6 +630,17 @@ export const DataImport = () => {
         </TabsContent>
 
         <TabsContent value="vendedores" className="space-y-4">
+          <Alert className="mb-4">
+            <FileSpreadsheet className="h-4 w-4" />
+            <AlertTitle>Formato del Excel</AlertTitle>
+            <AlertDescription className="space-y-2">
+              <p><strong>Columnas requeridas exactas:</strong> <code>codigo</code> y <code>nombre</code></p>
+              <p className="text-sm text-muted-foreground">
+                Se aceptan variaciones como "Código", "COD", "Nombre del Vendedor", etc., pero se recomienda usar la plantilla para evitar errores.
+              </p>
+            </AlertDescription>
+          </Alert>
+          
           <div className="space-y-4">
             <div className="flex items-center gap-4">
               <Button
@@ -665,6 +716,20 @@ export const DataImport = () => {
         </TabsContent>
 
         <TabsContent value="ventas" className="space-y-4">
+          <Alert className="mb-4">
+            <FileSpreadsheet className="h-4 w-4" />
+            <AlertTitle>Formato del Excel</AlertTitle>
+            <AlertDescription className="space-y-2">
+              <p><strong>Columnas requeridas exactas:</strong> <code>codigo_cliente</code>, <code>codigo_marca</code>, <code>codigo_vendedor</code>, <code>mes</code> y <code>monto</code></p>
+              <p className="text-sm text-muted-foreground">
+                Se aceptan variaciones como "Cliente", "Marca", "Vendedor", "Fecha", "Importe", etc., pero se recomienda usar la plantilla.
+              </p>
+              <p className="text-sm font-medium text-amber-600">
+                ⚠️ <strong>Importante:</strong> Debe importar primero Clientes, Marcas y Vendedores antes de importar Ventas Reales.
+              </p>
+            </AlertDescription>
+          </Alert>
+          
           <div className="space-y-4">
             <div className="flex items-center gap-4">
               <Button
