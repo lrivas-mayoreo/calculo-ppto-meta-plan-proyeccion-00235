@@ -64,10 +64,18 @@ serve(async (req) => {
       );
     }
 
+    if (!result || result.length === 0) {
+      console.error('No result returned from process_import_batch');
+      return new Response(
+        JSON.stringify({ error: 'No se recibió respuesta de la función de procesamiento' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     const processed = result[0]?.processed || 0;
     const errors = result[0]?.errors || 0;
 
-    console.log(`Processed ${processed} records, ${errors} errors for job ${jobId}`);
+    console.log(`Batch complete: ${processed} processed, ${errors} errors for job ${jobId}`);
 
     // Verificar si hay más datos por procesar
     const { count } = await supabaseClient
