@@ -326,8 +326,8 @@ export type Database = {
       process_import_batch: {
         Args: { p_batch_size?: number; p_job_id: string }
         Returns: {
-          errors: number
-          processed: number
+          error_count: number
+          processed_count: number
         }[]
       }
     }

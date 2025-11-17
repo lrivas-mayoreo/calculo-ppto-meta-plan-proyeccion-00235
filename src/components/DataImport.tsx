@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -29,11 +29,59 @@ interface DiagnosticResult {
   extraColumns: string[];
 }
 
+const CACHE_KEY = 'excel_import_cache';
+const DIAGNOSTICS_KEY = 'excel_diagnostics_cache';
+
 export const DataImport = () => {
   const [uploading, setUploading] = useState(false);
   const [importedData, setImportedData] = useState<ImportedData>({});
   const [uploadProgress, setUploadProgress] = useState(0);
   const [diagnostics, setDiagnostics] = useState<Record<string, DiagnosticResult>>({});
+
+  // Cargar datos de sessionStorage al montar
+  useEffect(() => {
+    const cachedData = sessionStorage.getItem(CACHE_KEY);
+    const cachedDiagnostics = sessionStorage.getItem(DIAGNOSTICS_KEY);
+    
+    if (cachedData) {
+      try {
+        const parsed = JSON.parse(cachedData);
+        setImportedData(parsed);
+        toast.info("Datos recuperados de la sesión anterior");
+      } catch (error) {
+        console.error("Error recuperando datos de caché:", error);
+        sessionStorage.removeItem(CACHE_KEY);
+      }
+    }
+    
+    if (cachedDiagnostics) {
+      try {
+        const parsed = JSON.parse(cachedDiagnostics);
+        setDiagnostics(parsed);
+      } catch (error) {
+        console.error("Error recuperando diagnósticos de caché:", error);
+        sessionStorage.removeItem(DIAGNOSTICS_KEY);
+      }
+    }
+  }, []);
+
+  // Guardar en sessionStorage cuando cambien los datos
+  useEffect(() => {
+    if (Object.keys(importedData).length > 0) {
+      sessionStorage.setItem(CACHE_KEY, JSON.stringify(importedData));
+    } else {
+      sessionStorage.removeItem(CACHE_KEY);
+    }
+  }, [importedData]);
+
+  // Guardar diagnósticos en sessionStorage
+  useEffect(() => {
+    if (Object.keys(diagnostics).length > 0) {
+      sessionStorage.setItem(DIAGNOSTICS_KEY, JSON.stringify(diagnostics));
+    } else {
+      sessionStorage.removeItem(DIAGNOSTICS_KEY);
+    }
+  }, [diagnostics]);
 
   const downloadTemplate = (type: "clientes" | "marcas" | "vendedores" | "ventas") => {
     let data: any[] = [];
@@ -309,7 +357,7 @@ export const DataImport = () => {
           }`
         );
         
-        // Limpiar datos
+        // Limpiar datos y caché
         const clearedData = { ...importedData };
         delete clearedData[type];
         setImportedData(clearedData);
@@ -317,6 +365,12 @@ export const DataImport = () => {
         const clearedDiagnostics = { ...diagnostics };
         delete clearedDiagnostics[type];
         setDiagnostics(clearedDiagnostics);
+        
+        // Limpiar sessionStorage para este tipo
+        if (Object.keys(clearedData).length === 0) {
+          sessionStorage.removeItem(CACHE_KEY);
+          sessionStorage.removeItem(DIAGNOSTICS_KEY);
+        }
       } else {
         throw new Error(finalJob?.error_message || 'Error desconocido');
       }
@@ -324,6 +378,9 @@ export const DataImport = () => {
     } catch (error) {
       console.error("Error:", error);
       toast.error(`Error en la importación: ${(error as Error).message}`);
+      // Limpiar caché en caso de error
+      sessionStorage.removeItem(CACHE_KEY);
+      sessionStorage.removeItem(DIAGNOSTICS_KEY);
     } finally {
       setUploading(false);
       setUploadProgress(0);
