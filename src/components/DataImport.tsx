@@ -378,11 +378,16 @@ export const DataImport = () => {
 
       if (finalJob?.status === 'completed') {
         setUploadProgress(100);
-        toast.success(
-          `¡Importación completada! ${finalJob.success_count.toLocaleString()} registros exitosos${
-            finalJob.error_count > 0 ? `, ${finalJob.error_count} errores` : ''
-          }`
-        );
+        
+        const successMsg = finalJob.success_count > 0 
+          ? `¡Importación completada! ${finalJob.success_count.toLocaleString()} registros exitosos`
+          : 'Importación completada sin registros nuevos';
+        
+        const errorMsg = finalJob.error_count > 0 
+          ? ` (${finalJob.error_count} registros omitidos por errores de validación)` 
+          : '';
+        
+        toast.success(successMsg + errorMsg);
         
         // Limpiar datos y caché
         const clearedData = { ...importedData };
@@ -399,7 +404,7 @@ export const DataImport = () => {
           sessionStorage.removeItem(DIAGNOSTICS_KEY);
         }
       } else {
-        throw new Error(finalJob?.error_message || 'Error desconocido');
+        throw new Error(finalJob?.error_message || 'Error desconocido al procesar');
       }
 
     } catch (error) {
