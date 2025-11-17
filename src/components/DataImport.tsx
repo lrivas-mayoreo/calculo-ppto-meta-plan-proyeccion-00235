@@ -43,11 +43,15 @@ export const DataImport = () => {
     const cachedData = sessionStorage.getItem(CACHE_KEY);
     const cachedDiagnostics = sessionStorage.getItem(DIAGNOSTICS_KEY);
     
+    // Solo mostramos que había datos, pero no los cargamos (archivos grandes)
     if (cachedData) {
       try {
         const parsed = JSON.parse(cachedData);
-        setImportedData(parsed);
-        toast.info("Datos recuperados de la sesión anterior");
+        // Solo verificamos si hay metadatos, no cargamos los datos completos
+        if (Object.keys(parsed).length > 0) {
+          toast.info("Sesión anterior detectada. Por favor, recarga el archivo Excel si deseas continuar.");
+        }
+        sessionStorage.removeItem(CACHE_KEY);
       } catch (error) {
         console.error("Error recuperando datos de caché:", error);
         sessionStorage.removeItem(CACHE_KEY);
@@ -65,19 +69,40 @@ export const DataImport = () => {
     }
   }, []);
 
-  // Guardar en sessionStorage cuando cambien los datos
+  // Guardar en sessionStorage cuando cambien los datos (con manejo de errores)
   useEffect(() => {
     if (Object.keys(importedData).length > 0) {
-      sessionStorage.setItem(CACHE_KEY, JSON.stringify(importedData));
+      try {
+        // Intentar guardar solo metadatos para evitar exceder cuota
+        const metadata = Object.keys(importedData).reduce((acc, key) => {
+          const data = importedData[key as keyof ImportedData];
+          acc[key] = {
+            rowCount: data?.length || 0,
+            hasData: true
+          };
+          return acc;
+        }, {} as Record<string, any>);
+        
+        sessionStorage.setItem(CACHE_KEY, JSON.stringify(metadata));
+      } catch (error) {
+        // Si falla (QuotaExceededError), simplemente no cachear
+        console.warn("No se pudo cachear datos en sessionStorage:", error);
+        sessionStorage.removeItem(CACHE_KEY);
+      }
     } else {
       sessionStorage.removeItem(CACHE_KEY);
     }
   }, [importedData]);
 
-  // Guardar diagnósticos en sessionStorage
+  // Guardar diagnósticos en sessionStorage (con manejo de errores)
   useEffect(() => {
     if (Object.keys(diagnostics).length > 0) {
-      sessionStorage.setItem(DIAGNOSTICS_KEY, JSON.stringify(diagnostics));
+      try {
+        sessionStorage.setItem(DIAGNOSTICS_KEY, JSON.stringify(diagnostics));
+      } catch (error) {
+        console.warn("No se pudo cachear diagnósticos en sessionStorage:", error);
+        sessionStorage.removeItem(DIAGNOSTICS_KEY);
+      }
     } else {
       sessionStorage.removeItem(DIAGNOSTICS_KEY);
     }
