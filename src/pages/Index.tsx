@@ -234,6 +234,12 @@ const Index = () => {
     const errores: CalculationResult["errores"] = [];
     let totalPresupuestoGeneral = 0;
     let totalPromedioReferenciaGeneral = 0;
+    
+    // Create a map for quick lookups
+    const marcasMap = new Map(marcas.map(m => [m.codigo, m.nombre]));
+    const clientesMap = new Map(clientes.map(c => [c.codigo, c.nombre]));
+    const vendedoresMap = new Map(vendedores.map(v => [v.codigo, v.nombre]));
+    
     marcasPresupuesto.forEach(marcaPresupuesto => {
       const {
         marca,
@@ -242,8 +248,11 @@ const Index = () => {
         presupuesto
       } = marcaPresupuesto;
 
+      // Find marca codigo from nombre
+      const marcaCodigo = Array.from(marcasMap.entries()).find(([_, nombre]) => nombre === marca)?.[0];
+      
       // Validación Error 1: Marca no existe
-      if (!MOCK_DATA.marcas.includes(marca)) {
+      if (!marcaCodigo) {
         errores.push({
           tipo: 1,
           marca,
@@ -254,8 +263,10 @@ const Index = () => {
         return;
       }
 
-      // Obtener ventas de los meses de referencia para esta marca y empresa
-      const ventasMesesReferencia = MOCK_DATA.ventas.filter(v => mesesReferencia.includes(v.mesAnio) && v.marca === marca && v.empresa === empresa);
+      // Obtener ventas de los meses de referencia para esta marca
+      const ventasMesesReferencia = ventas.filter(v => 
+        mesesReferencia.includes(v.mes) && v.codigo_marca === marcaCodigo
+      );
 
       // Validación Error 4: Marca sin ventas en meses de referencia
       if (ventasMesesReferencia.length === 0) {
@@ -293,19 +304,23 @@ const Index = () => {
       const ventasPorCliente = new Map<string, {
         cliente: string;
         vendedor: string;
-        empresa: string;
-        ventas: typeof MOCK_DATA.ventas;
+        ventas: Array<{mes: string; monto: number}>;
       }>();
       ventasMesesReferencia.forEach(venta => {
-        if (!ventasPorCliente.has(venta.cliente)) {
-          ventasPorCliente.set(venta.cliente, {
-            cliente: venta.cliente,
-            vendedor: venta.vendedor,
-            empresa: venta.empresa,
+        const clienteNombre = clientesMap.get(venta.codigo_cliente) || venta.codigo_cliente;
+        const vendedorNombre = venta.codigo_vendedor ? (vendedoresMap.get(venta.codigo_vendedor) || venta.codigo_vendedor) : 'Sin vendedor';
+        
+        if (!ventasPorCliente.has(clienteNombre)) {
+          ventasPorCliente.set(clienteNombre, {
+            cliente: clienteNombre,
+            vendedor: vendedorNombre,
             ventas: []
           });
         }
-        ventasPorCliente.get(venta.cliente)!.ventas.push(venta);
+        ventasPorCliente.get(clienteNombre)!.ventas.push({
+          mes: venta.mes,
+          monto: venta.monto
+        });
       });
 
       // Calcular distribución por cliente
