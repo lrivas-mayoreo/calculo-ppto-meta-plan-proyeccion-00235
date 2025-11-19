@@ -178,23 +178,10 @@ export const CSVImport = () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Usuario no autenticado");
 
-      const batchSize = 3000;
+      const BATCH_SIZE = 1000; // Lotes más pequeños
       const { type, data } = parsedData;
+      const jobId = crypto.randomUUID();
       
-      // Crear job de importación
-      const { data: job, error: jobError } = await supabase
-        .from('import_jobs')
-        .insert({
-          user_id: user.id,
-          type,
-          total_rows: data.length,
-          status: 'pending'
-        })
-        .select()
-        .single();
-
-      if (jobError) throw jobError;
-
       // Normalizar datos
       const normalizedData = data.map(row => {
         if (type === 'clientes' || type === 'marcas' || type === 'vendedores') {
@@ -214,15 +201,21 @@ export const CSVImport = () => {
         return row;
       });
 
-      // Enviar en lotes
-      for (let i = 0; i < normalizedData.length; i += batchSize) {
-        const batch = normalizedData.slice(i, i + batchSize);
+      const totalBatches = Math.ceil(normalizedData.length / BATCH_SIZE);
+      console.log(`Iniciando importación: ${normalizedData.length} registros en ${totalBatches} lotes`);
+
+      // Enviar en lotes con control
+      for (let i = 0; i < normalizedData.length; i += BATCH_SIZE) {
+        const batch = normalizedData.slice(i, i + BATCH_SIZE);
         const isFirstBatch = i === 0;
-        const isLastBatch = i + batchSize >= normalizedData.length;
+        const isLastBatch = i + BATCH_SIZE >= normalizedData.length;
+        const currentBatch = Math.floor(i / BATCH_SIZE) + 1;
+
+        console.log(`Enviando lote ${currentBatch}/${totalBatches} (${batch.length} registros)`);
 
         const { error } = await supabase.functions.invoke('import-data-batch', {
           body: {
-            jobId: job.id,
+            jobId,
             batch,
             isFirstBatch,
             isLastBatch,
@@ -230,31 +223,68 @@ export const CSVImport = () => {
           }
         });
 
-        if (error) throw error;
+        if (error) {
+          console.error(`Error en lote ${currentBatch}:`, error);
+          throw new Error(`Error en lote ${currentBatch}: ${error.message}`);
+        }
 
-        const progressPercent = Math.min(90, ((i + batch.length) / normalizedData.length) * 90);
+        // Progreso: 0-85% para envío de lotes
+        const progressPercent = Math.min(85, ((i + batch.length) / normalizedData.length) * 85);
         setProgress(progressPercent);
+
+        // Pequeña pausa entre lotes para no sobrecargar
+        if (!isLastBatch) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
       }
 
-      // Monitorear progreso
-      const checkInterval = setInterval(async () => {
+      console.log('Todos los lotes enviados, esperando procesamiento...');
+      setProgress(90);
+
+      // Monitorear progreso del procesamiento
+      let attempts = 0;
+      const maxAttempts = 300; // 10 minutos máximo
+      
+      const checkStatus = async () => {
         const { data: jobStatus } = await supabase
           .from('import_jobs')
-          .select('status, processed_rows, error_count')
-          .eq('id', job.id)
+          .select('status, processed_rows, error_count, total_rows')
+          .eq('id', jobId)
           .single();
 
         if (jobStatus) {
+          console.log(`Estado: ${jobStatus.status}, Procesados: ${jobStatus.processed_rows}/${jobStatus.total_rows}`);
+          
+          // Actualizar progreso durante procesamiento (90-100%)
+          if (jobStatus.total_rows > 0) {
+            const processingProgress = 90 + ((jobStatus.processed_rows / jobStatus.total_rows) * 10);
+            setProgress(Math.min(100, processingProgress));
+          }
+
           if (jobStatus.status === 'completed') {
-            clearInterval(checkInterval);
             setProgress(100);
             toast.success(`Importación completada: ${jobStatus.processed_rows} registros`);
             setParsedData(null);
             setValidationResult(null);
             setUploading(false);
+            return true;
           } else if (jobStatus.status === 'failed') {
-            clearInterval(checkInterval);
-            toast.error("Error en la importación");
+            toast.error(`Error en la importación: ${jobStatus.error_count} errores`);
+            setUploading(false);
+            return true;
+          }
+        }
+        return false;
+      };
+
+      const pollInterval = setInterval(async () => {
+        attempts++;
+        const isDone = await checkStatus();
+        
+        if (isDone || attempts >= maxAttempts) {
+          clearInterval(pollInterval);
+          if (attempts >= maxAttempts) {
+            toast.error("Tiempo de espera agotado");
             setUploading(false);
           }
         }
