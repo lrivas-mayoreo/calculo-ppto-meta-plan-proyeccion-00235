@@ -11,6 +11,8 @@ import { RoleManagement } from "@/components/RoleManagement";
 import { FormulaExplanation } from "@/components/FormulaExplanation";
 import { SuggestedBudget } from "@/components/SuggestedBudget";
 import { DataImport } from "@/components/DataImport";
+import { CSVImport } from "@/components/CSVImport";
+import { VendorBudgetView } from "@/components/VendorBudgetView";
 import { Calculator, TrendingUp, Calendar, Users, LogOut, Shield } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -416,6 +418,9 @@ const Index = () => {
   }, {
     value: "admin_ventas",
     label: "Admin. Ventas"
+  }, {
+    value: "vendedor",
+    label: "Vendedor"
   }];
   const handleRoleChange = (newRole: string) => {
     setSimulatedRole(newRole);
@@ -446,7 +451,7 @@ const Index = () => {
                     {userRole ? <>
                         <span className="text-xs font-semibold text-primary bg-primary/10 px-3 py-1 rounded-full border border-primary/20">
                           <Shield className="h-3 w-3 inline mr-1" />
-                          {userRole === "admin_ventas" ? "Admin. Ventas" : userRole === "administrador" ? "Administrador" : userRole === "gerente" ? "Gerente" : userRole}
+                          {userRole === "admin_ventas" ? "Admin. Ventas" : userRole === "administrador" ? "Administrador" : userRole === "gerente" ? "Gerente" : userRole === "vendedor" ? "Vendedor" : userRole}
                         </span>
                         <Select value={activeRole || undefined} onValueChange={handleRoleChange}>
                           <SelectTrigger className="h-7 w-[140px] text-xs">
@@ -474,26 +479,29 @@ const Index = () => {
       </header>
 
       <main className="container mx-auto px-4 py-8">
-        <div className="space-y-6">
-          <Card className="p-6 shadow-md">
-              <BudgetForm 
-                onCalculate={handleCalculate} 
-                mockData={{
-                  marcas: MOCK_DATA.marcas,
-                  empresas: MOCK_DATA.empresas,
-                  articulos: MOCK_DATA.articulos
-                }} 
-                mesesDisponibles={mesesDisponibles} 
-                onMarcasPresupuestoLoad={setMarcasPresupuesto} 
-                historicalBudgets={allHistoricalBudgets} 
-                ventasData={MOCK_DATA.ventas}
-                vendorAdjustments={vendorAdjustments}
-                brandAdjustments={brandAdjustments}
-                presupuestoTotal={marcasPresupuesto.reduce((sum, mp) => sum + mp.presupuesto, 0)}
-              />
-          </Card>
+        {activeRole === "vendedor" ? (
+          <VendorBudgetView />
+        ) : (
+          <div className="space-y-6">
+            <Card className="p-6 shadow-md">
+                <BudgetForm 
+                  onCalculate={handleCalculate} 
+                  mockData={{
+                    marcas: MOCK_DATA.marcas,
+                    empresas: MOCK_DATA.empresas,
+                    articulos: MOCK_DATA.articulos
+                  }} 
+                  mesesDisponibles={mesesDisponibles} 
+                  onMarcasPresupuestoLoad={setMarcasPresupuesto} 
+                  historicalBudgets={allHistoricalBudgets} 
+                  ventasData={MOCK_DATA.ventas}
+                  vendorAdjustments={vendorAdjustments}
+                  brandAdjustments={brandAdjustments}
+                  presupuestoTotal={marcasPresupuesto.reduce((sum, mp) => sum + mp.presupuesto, 0)}
+                />
+            </Card>
 
-          <div>
+            <div>
             {activeRole === "administrador" ? <Tabs defaultValue="results" className="space-y-6">
                 <TabsList className="grid w-full grid-cols-4 h-auto">
                   <TabsTrigger value="results" className="text-sm">Parámetros</TabsTrigger>
@@ -586,7 +594,7 @@ const Index = () => {
                   </TabsContent>}
 
                 <TabsContent value="import">
-                  <DataImport />
+                  <CSVImport />
                 </TabsContent>
 
                 <TabsContent value="roles">
@@ -678,8 +686,9 @@ const Index = () => {
                     />
                   </TabsContent>}
               </Tabs>}
+            </div>
           </div>
-        </div>
+        )}
       </main>
     </div>;
 };
