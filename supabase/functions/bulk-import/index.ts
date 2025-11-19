@@ -52,67 +52,28 @@ serve(async (req) => {
 
     console.log(`Processing ${type} file: ${file.name}, size: ${file.size} bytes`);
 
-    // Para archivos grandes, procesar en chunks
-    const MAX_MEMORY_SIZE = 40 * 1024 * 1024; // 40MB limit para evitar OOM
-    const isLargeFile = file.size > MAX_MEMORY_SIZE;
-    
-    if (isLargeFile) {
-      console.log(`Large file detected (${file.size} bytes), processing in streaming mode`);
-    }
-
     // Leer archivo Excel con configuración optimizada para memoria
     const arrayBuffer = await file.arrayBuffer();
     const workbook = XLSX.read(new Uint8Array(arrayBuffer), { 
       type: 'array',
-      dense: false, // Usa arrays regulares en lugar de sparse arrays
+      dense: false,
       raw: false,
       cellDates: false,
       cellNF: false,
       cellStyles: false,
-      sheetStubs: false // No crear stubs para celdas vacías
+      sheetStubs: false
     });
     
     const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+    const jsonData = XLSX.utils.sheet_to_json(worksheet, {
+      defval: null,
+      raw: false
+    });
+
+    console.log(`Parsed ${jsonData.length} rows from Excel`);
     
-    // Para archivos grandes, procesar por chunks
-    const CHUNK_SIZE = 5000; // Procesar 5000 filas a la vez
-    let normalizedData: any[] = [];
-    
-    if (isLargeFile) {
-      const range = XLSX.utils.decode_range(worksheet['!ref'] || 'A1');
-      const totalRows = range.e.r - range.s.r;
-      console.log(`Total rows in Excel: ${totalRows}`);
-      
-      // Procesar en chunks
-      for (let startRow = range.s.r + 1; startRow <= range.e.r; startRow += CHUNK_SIZE) {
-        const endRow = Math.min(startRow + CHUNK_SIZE - 1, range.e.r);
-        
-        // Crear un rango limitado
-        const chunkRange = { s: { r: range.s.r, c: range.s.c }, e: { r: endRow, c: range.e.c } };
-        worksheet['!ref'] = XLSX.utils.encode_range(chunkRange);
-        
-        const chunkData = XLSX.utils.sheet_to_json(worksheet, {
-          defval: null,
-          raw: false,
-          range: startRow - 1
-        });
-        
-        const normalized = normalizeAndValidateData(chunkData, type);
-        normalizedData = normalizedData.concat(normalized);
-        
-        console.log(`Processed chunk: rows ${startRow}-${endRow}, valid: ${normalized.length}`);
-        
-        // Liberar memoria del chunk
-        chunkData.length = 0;
-      }
-    } else {
-      const jsonData = XLSX.utils.sheet_to_json(worksheet, {
-        defval: null,
-        raw: false
-      });
-      console.log(`Parsed ${jsonData.length} rows from Excel`);
-      normalizedData = normalizeAndValidateData(jsonData, type);
-    }
+    // Normalizar nombres de columnas y validar campos requeridos
+    const normalizedData = normalizeAndValidateData(jsonData, type);
     
     
     if (normalizedData.length === 0) {
@@ -146,16 +107,13 @@ serve(async (req) => {
 
     console.log(`Created job ${job.id} for ${normalizedData.length} rows`);
 
-    // Iniciar procesamiento en background con waitUntil para que el runtime espere
+    // Iniciar procesamiento en background
     const backgroundTask = insertAndProcessData(supabaseClient, job.id, normalizedData, type, user.id);
     
-    // Usar EdgeRuntime.waitUntil para asegurar que la tarea termine antes de cerrar
+    // Usar EdgeRuntime.waitUntil para asegurar que la tarea termine
     if (typeof EdgeRuntime !== 'undefined' && EdgeRuntime.waitUntil) {
       EdgeRuntime.waitUntil(backgroundTask);
-      console.log('Background task registered with EdgeRuntime.waitUntil');
     } else {
-      // Fallback: esperar la tarea si waitUntil no está disponible
-      console.warn('EdgeRuntime.waitUntil not available, awaiting task directly');
       await backgroundTask;
     }
 
@@ -192,8 +150,8 @@ async function insertAndProcessData(
   try {
     console.log(`[${jobId}] Starting data insertion for job with ${jsonData.length} rows`);
 
-    // Para ventas grandes, usar lotes más pequeños para evitar timeouts
-    const STAGING_BATCH_SIZE = jsonData.length > 50000 ? 5000 : 10000;
+    // Usar lotes más pequeños para evitar timeouts
+    const STAGING_BATCH_SIZE = 5000;
     let totalInserted = 0;
     
     for (let i = 0; i < jsonData.length; i += STAGING_BATCH_SIZE) {
@@ -203,12 +161,11 @@ async function insertAndProcessData(
         row_data: item
       }));
 
-      console.log(`[${jobId}] Attempting to insert batch ${Math.floor(i / STAGING_BATCH_SIZE) + 1}, rows ${i}-${Math.min(i + STAGING_BATCH_SIZE, jsonData.length)}`);
+      console.log(`[${jobId}] Inserting batch ${Math.floor(i / STAGING_BATCH_SIZE) + 1}, rows ${i}-${Math.min(i + STAGING_BATCH_SIZE, jsonData.length)}`);
 
-      const { error: stagingError, count } = await supabase
+      const { error: stagingError } = await supabase
         .from('import_staging')
-        .insert(stagingBatch)
-        .select('id', { count: 'exact', head: true });
+        .insert(stagingBatch);
 
       if (stagingError) {
         console.error(`[${jobId}] Error inserting staging batch:`, stagingError);
@@ -216,7 +173,7 @@ async function insertAndProcessData(
       }
       
       totalInserted += batch.length;
-      console.log(`[${jobId}] Successfully inserted batch ${Math.floor(i / STAGING_BATCH_SIZE) + 1}, total: ${totalInserted}/${jsonData.length} rows`);
+      console.log(`[${jobId}] Successfully inserted batch, total: ${totalInserted}/${jsonData.length}`);
     }
 
     console.log(`[${jobId}] All ${totalInserted} rows inserted to staging, starting processing`);
@@ -229,7 +186,7 @@ async function insertAndProcessData(
 
     // Procesar en lotes desde staging a tablas finales
     let hasMore = true;
-    const PROCESS_BATCH_SIZE = 2000; // Lotes más grandes para procesar más rápido
+    const PROCESS_BATCH_SIZE = 1000;
 
     while (hasMore) {
       const { data: result, error } = await supabase
@@ -239,7 +196,7 @@ async function insertAndProcessData(
         });
 
       if (error) {
-        console.error('Error processing batch:', error);
+        console.error(`[${jobId}] Error processing batch:`, error);
         await supabase
           .from('import_jobs')
           .update({ 
@@ -253,7 +210,7 @@ async function insertAndProcessData(
       const processed = result[0]?.processed || 0;
       hasMore = processed > 0;
 
-      console.log(`Processed ${processed} records for job ${jobId}`);
+      console.log(`[${jobId}] Processed ${processed} records`);
     }
 
     // Marcar como completado
