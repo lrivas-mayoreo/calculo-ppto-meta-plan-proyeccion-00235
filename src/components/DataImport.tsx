@@ -285,6 +285,61 @@ export const DataImport = () => {
     event.target.value = "";
   };
 
+  const normalizeData = (data: any[], type: string) => {
+    return data.map(row => {
+      const normalized: any = {};
+      
+      // Normalizar nombres de columnas
+      for (const [key, value] of Object.entries(row)) {
+        const normalizedKey = key
+          .toLowerCase()
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .replace(/\s+/g, '_')
+          .replace(/[^a-z0-9_]/g, '');
+        
+        // Mapear variaciones comunes
+        const keyMappings: Record<string, string> = {
+          'cod': 'codigo',
+          'codigo_de_cliente': 'codigo_cliente',
+          'codigo_del_cliente': 'codigo_cliente',
+          'cliente': 'codigo_cliente',
+          'cod_cliente': 'codigo_cliente',
+          'codigo_de_marca': 'codigo_marca',
+          'marca': 'codigo_marca',
+          'cod_marca': 'codigo_marca',
+          'codigo_de_vendedor': 'codigo_vendedor',
+          'vendedor': 'codigo_vendedor',
+          'cod_vendedor': 'codigo_vendedor',
+          'nombre_del_cliente': 'nombre',
+          'nombre_de_la_marca': 'nombre',
+          'nombre_del_vendedor': 'nombre',
+          'razon_social': 'nombre',
+          'descripcion': 'nombre',
+          'fecha': 'mes',
+          'periodo': 'mes',
+          'importe': 'monto',
+          'valor': 'monto',
+          'venta': 'monto',
+          'total': 'monto'
+        };
+        
+        const finalKey = keyMappings[normalizedKey] || normalizedKey;
+        
+        if (value !== null && value !== '') {
+          if (finalKey === 'monto') {
+            const numValue = String(value).replace(/[^0-9.-]/g, '');
+            normalized[finalKey] = numValue;
+          } else {
+            normalized[finalKey] = String(value).trim();
+          }
+        }
+      }
+      
+      return normalized;
+    });
+  };
+
   const importToDatabase = async (type: "clientes" | "marcas" | "vendedores" | "ventas") => {
     const data = importedData[type];
     if (!data || data.length === 0) {
@@ -309,120 +364,109 @@ export const DataImport = () => {
         return;
       }
 
-      // Crear el archivo Excel original para enviarlo al backend
-      const ws = XLSX.utils.json_to_sheet(data);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, "Datos");
-      const excelBuffer = XLSX.write(wb, { type: 'array', bookType: 'xlsx' });
-      const blob = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-
-      // Enviar al edge function (solo carga a staging)
-      const formData = new FormData();
-      formData.append('file', blob, `${type}.xlsx`);
-      formData.append('type', type);
-
-      setUploadProgress(10);
-
-      const response = await supabase.functions.invoke('bulk-import', {
-        body: formData,
-      });
-
-      if (response.error) {
-        throw new Error(response.error.message);
-      }
-
-      const result = response.data;
-
-      if (!result.success || !result.jobId) {
-        throw new Error('Error iniciando importación');
-      }
-
-      const jobId = result.jobId;
-      const totalRows = result.totalRows;
-      toast.success(`Datos cargados: ${totalRows.toLocaleString()} registros. Procesando...`);
+      // Normalizar datos en el frontend
+      const normalizedData = normalizeData(data, type);
+      const totalRows = normalizedData.length;
       
-      setUploadProgress(20);
+      // Generar ID único para el job
+      const jobId = crypto.randomUUID();
+      
+      toast.success(`Iniciando importación de ${totalRows.toLocaleString()} registros...`);
+      setUploadProgress(5);
 
-      // Procesar lotes hasta completar
-      let hasMore = true;
-      let attempts = 0;
-      const maxAttempts = 200; // Máximo de lotes
-
-      while (hasMore && attempts < maxAttempts) {
-        attempts++;
-
-        const { data: batchResult, error: batchError } = await supabase.functions.invoke('process-import-batch', {
-          body: { jobId, batchSize: 3000 }
+      // Enviar datos en batches de 3000 registros
+      const BATCH_SIZE = 3000;
+      const totalBatches = Math.ceil(totalRows / BATCH_SIZE);
+      
+      for (let i = 0; i < totalBatches; i++) {
+        const start = i * BATCH_SIZE;
+        const end = Math.min(start + BATCH_SIZE, totalRows);
+        const batch = normalizedData.slice(start, end);
+        
+        const isFirstBatch = i === 0;
+        const isLastBatch = i === totalBatches - 1;
+        
+        console.log(`Sending batch ${i + 1}/${totalBatches}: ${batch.length} rows`);
+        
+        const { error: batchError } = await supabase.functions.invoke('import-data-batch', {
+          body: {
+            jobId,
+            batch,
+            isFirstBatch,
+            isLastBatch,
+            type
+          }
         });
 
         if (batchError) {
-          throw new Error(`Error procesando lote: ${batchError.message}`);
+          throw new Error(`Error en batch ${i + 1}: ${batchError.message}`);
         }
-
-        hasMore = batchResult.hasMore;
-
-        // Actualizar progreso basado en el job
-        const { data: job } = await supabase
-          .from('import_jobs')
-          .select('processed_rows, total_rows, status')
-          .eq('id', jobId)
-          .single();
-
-        if (job) {
-          if (job.status === 'failed') {
-            throw new Error('El procesamiento falló en el servidor');
-          }
-          
-          const progress = 20 + (job.processed_rows / job.total_rows) * 75;
-          setUploadProgress(Math.min(Math.floor(progress), 99));
-        }
-
-        // Pequeña pausa
-        if (hasMore) {
+        
+        // Actualizar progreso (5% al 90%)
+        const progress = 5 + ((i + 1) / totalBatches) * 85;
+        setUploadProgress(Math.floor(progress));
+        
+        // Pequeña pausa entre batches para no saturar
+        if (!isLastBatch) {
           await new Promise(resolve => setTimeout(resolve, 100));
         }
       }
-
-      if (attempts >= maxAttempts) {
-        throw new Error('Se alcanzó el límite de lotes. Por favor, contacta soporte.');
-      }
-
-      // Verificar resultado final
-      const { data: finalJob } = await supabase
-        .from('import_jobs')
-        .select('*')
-        .eq('id', jobId)
-        .single();
-
-      if (finalJob?.status === 'completed') {
-        setUploadProgress(100);
+      
+      // Esperar a que termine el procesamiento
+      toast.info("Procesando datos en la base de datos...");
+      setUploadProgress(95);
+      
+      let processingComplete = false;
+      let attempts = 0;
+      const maxAttempts = 60; // 30 segundos máximo
+      
+      while (!processingComplete && attempts < maxAttempts) {
+        attempts++;
+        await new Promise(resolve => setTimeout(resolve, 500));
         
-        const successMsg = finalJob.success_count > 0 
-          ? `¡Importación completada! ${finalJob.success_count.toLocaleString()} registros exitosos`
-          : 'Importación completada sin registros nuevos';
+        const { data: job } = await supabase
+          .from('import_jobs')
+          .select('status, success_count, error_count, error_message')
+          .eq('id', jobId)
+          .single();
         
-        const errorMsg = finalJob.error_count > 0 
-          ? ` (${finalJob.error_count} registros omitidos por errores de validación)` 
-          : '';
-        
-        toast.success(successMsg + errorMsg);
-        
-        // Limpiar datos y caché
-        const clearedData = { ...importedData };
-        delete clearedData[type];
-        setImportedData(clearedData);
-        
-        const clearedDiagnostics = { ...diagnostics };
-        delete clearedDiagnostics[type];
-        setDiagnostics(clearedDiagnostics);
-        
-        // Limpiar sessionStorage para este tipo
-        if (Object.keys(clearedData).length === 0) {
-          sessionStorage.removeItem(CACHE_KEY);
-          sessionStorage.removeItem(DIAGNOSTICS_KEY);
+        if (job) {
+          if (job.status === 'completed') {
+            processingComplete = true;
+            setUploadProgress(100);
+            
+            const successMsg = job.success_count > 0 
+              ? `¡Importación completada! ${job.success_count.toLocaleString()} registros exitosos`
+              : 'Importación completada sin registros nuevos';
+            
+            const errorMsg = job.error_count > 0 
+              ? ` (${job.error_count} registros omitidos)` 
+              : '';
+            
+            toast.success(successMsg + errorMsg);
+          } else if (job.status === 'failed') {
+            throw new Error(job.error_message || 'Error desconocido al procesar');
+          }
         }
-      } else {
-        throw new Error(finalJob?.error_message || 'Error desconocido al procesar');
+      }
+      
+      if (!processingComplete) {
+        throw new Error('Tiempo de espera agotado. El procesamiento continúa en segundo plano.');
+      }
+      
+      // Limpiar datos y caché
+      const clearedData = { ...importedData };
+      delete clearedData[type];
+      setImportedData(clearedData);
+      
+      const clearedDiagnostics = { ...diagnostics };
+      delete clearedDiagnostics[type];
+      setDiagnostics(clearedDiagnostics);
+      
+      // Limpiar sessionStorage
+      if (Object.keys(clearedData).length === 0) {
+        sessionStorage.removeItem(CACHE_KEY);
+        sessionStorage.removeItem(DIAGNOSTICS_KEY);
       }
 
     } catch (error) {
