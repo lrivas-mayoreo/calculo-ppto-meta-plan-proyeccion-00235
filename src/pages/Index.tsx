@@ -532,7 +532,8 @@ const Index = () => {
           </Card>
 
           <div>
-            {activeRole === "administrador" ? <Tabs defaultValue="results" className="space-y-6">
+            {activeRole === "administrador" ? (
+              <Tabs defaultValue="results" className="space-y-6">
                 <TabsList className="grid w-full grid-cols-4 h-auto">
                   <TabsTrigger value="results" className="text-sm">Parámetros</TabsTrigger>
                   <TabsTrigger value="vendors" disabled={!result} className="text-sm">Vendedores-Clientes</TabsTrigger>
@@ -544,7 +545,6 @@ const Index = () => {
                 </TabsList>
 
                 <TabsContent value="results" className="space-y-6">
-                selectedVendor ? (
                   <div className="space-y-6">
                     <Card className="p-6">
                       <div className="space-y-4">
@@ -643,9 +643,92 @@ const Index = () => {
                       </p>
                     </div>
                   </Card>
-                )
-              ) : <Tabs defaultValue="results" className="space-y-6">
-                  {result && activeRole === "administrador" && vendedoresUnicos.length > 0 && <Card className="p-4">
+                </TabsContent>
+
+                <TabsContent value="vendors">
+                  {result && (
+                    <VendorClientTable
+                      result={result}
+                      vendorAdjustments={vendorAdjustments}
+                      presupuestoTotal={result.resultadosMarcas.reduce((sum, m) => 
+                        sum + m.distribucionClientes.reduce((s, c) => s + c.subtotal, 0), 0
+                      )}
+                      userRole={activeRole}
+                      marcasPresupuesto={marcasPresupuesto}
+                      userId={user.id}
+                      onBrandAdjustmentsChange={setBrandAdjustments}
+                    />
+                  )}
+                </TabsContent>
+
+                <TabsContent value="import">
+                  <DataImport />
+                </TabsContent>
+
+                <TabsContent value="roles">
+                  <RoleManagement />
+                </TabsContent>
+              </Tabs>
+            ) : activeRole === "vendedor" ? (
+              selectedVendor ? (
+                <div className="space-y-6">
+                  <Card className="p-6">
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h2 className="text-xl font-semibold text-foreground">Vista de Vendedor</h2>
+                          <p className="text-sm text-muted-foreground">
+                            Vendedor: {availableVendors.find(v => v.codigo === selectedVendor)?.nombre}
+                          </p>
+                        </div>
+                        {result && (
+                          <VendorBudgetDistribution
+                            result={result}
+                            vendorCode={selectedVendor}
+                            onDistribute={() => {
+                              toast.success("Distribución aplicada correctamente");
+                            }}
+                          />
+                        )}
+                      </div>
+                    </div>
+                  </Card>
+
+                  {result && (
+                    <VendorClientTable
+                      result={result}
+                      vendorAdjustments={vendorAdjustments}
+                      presupuestoTotal={result.totalPresupuesto}
+                      userRole={activeRole}
+                      marcasPresupuesto={marcasPresupuesto}
+                      userId={user.id}
+                      onBrandAdjustmentsChange={setBrandAdjustments}
+                      selectedVendor={selectedVendor}
+                    />
+                  )}
+                </div>
+              ) : (
+                <Card className="p-6">
+                  <div className="text-center py-8">
+                    <Users className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                    <h3 className="text-lg font-semibold text-foreground mb-2">
+                      Seleccione un Vendedor
+                    </h3>
+                    <p className="text-sm text-muted-foreground">
+                      Por favor seleccione un vendedor en el selector de arriba para ver sus datos
+                    </p>
+                  </div>
+                </Card>
+              )
+            ) : (
+              <Tabs defaultValue="results" className="space-y-6">
+                <TabsList className={`grid w-full ${activeRole === "gerente" || activeRole === "admin_ventas" ? "grid-cols-2" : "grid-cols-1"}`}>
+                  <TabsTrigger value="results">Parámetros</TabsTrigger>
+                  {(activeRole === "gerente" || activeRole === "admin_ventas") && <TabsTrigger value="vendors">Vendedores-Clientes</TabsTrigger>}
+                </TabsList>
+
+                <TabsContent value="results" className="space-y-6">
+                  {result && (activeRole === "gerente" || activeRole === "admin_ventas") && vendedoresUnicos.length > 0 && <Card className="p-4">
                       <VendorAdjustment 
                         vendedores={vendedoresUnicos} 
                         presupuestoTotal={result.resultadosMarcas.reduce((sum, m) => 
@@ -724,72 +807,6 @@ const Index = () => {
                     />
                   </TabsContent>}
 
-                <TabsContent value="import">
-                  <DataImport />
-                </TabsContent>
-
-                <TabsContent value="roles">
-                  <RoleManagement />
-                </TabsContent>
-              </Tabs> 
-              ) : activeRole === "vendedor" ? (
-                selectedVendor ? (
-                  <div className="space-y-6">
-                    <Card className="p-6">
-                      <div className="space-y-4">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <h2 className="text-xl font-semibold text-foreground">Vista de Vendedor</h2>
-                            <p className="text-sm text-muted-foreground">
-                              Vendedor: {availableVendors.find(v => v.codigo === selectedVendor)?.nombre}
-                            </p>
-                          </div>
-                          {result && (
-                            <VendorBudgetDistribution
-                              result={result}
-                              vendorCode={selectedVendor}
-                              onDistribute={() => {
-                                toast.success("Distribución aplicada correctamente");
-                              }}
-                            />
-                          )}
-                        </div>
-                      </div>
-                    </Card>
-
-                    {result && (
-                      <VendorClientTable
-                        result={result}
-                        vendorAdjustments={vendorAdjustments}
-                        presupuestoTotal={result.totalPresupuesto}
-                        userRole={activeRole}
-                        marcasPresupuesto={marcasPresupuesto}
-                        userId={user.id}
-                        onBrandAdjustmentsChange={setBrandAdjustments}
-                        selectedVendor={selectedVendor}
-                      />
-                    )}
-                  </div>
-                ) : (
-                  <Card className="p-6">
-                    <div className="text-center py-8">
-                      <Users className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                      <h3 className="text-lg font-semibold text-foreground mb-2">
-                        Seleccione un Vendedor
-                      </h3>
-                      <p className="text-sm text-muted-foreground">
-                        Por favor seleccione un vendedor en el selector de arriba para ver sus datos
-                      </p>
-                    </div>
-                  </Card>
-                )
-              ) : <Tabs defaultValue="results" className="space-y-6">
-                <TabsList className={`grid w-full ${activeRole === "gerente" || activeRole === "admin_ventas" ? "grid-cols-2" : "grid-cols-1"}`}>
-                  <TabsTrigger value="results">Parámetros</TabsTrigger>
-                  {(activeRole === "gerente" || activeRole === "admin_ventas") && <TabsTrigger value="vendors">Vendedores-Clientes</TabsTrigger>}
-                </TabsList>
-
-                <TabsContent value="results" className="space-y-6">
                   {result && (activeRole === "administrador" || activeRole === "gerente" || activeRole === "admin_ventas") && vendedoresUnicos.length > 0 && <Card className="p-4">
                       <VendorAdjustment 
                         vendedores={vendedoresUnicos} 
@@ -855,7 +872,8 @@ const Index = () => {
                   </>}
                 </TabsContent>
 
-                {result && (activeRole === "gerente" || activeRole === "admin_ventas") && <TabsContent value="vendors">
+                {result && (activeRole === "gerente" || activeRole === "admin_ventas") && (
+                  <TabsContent value="vendors">
                     <VendorClientTable 
                       result={result} 
                       vendorAdjustments={vendorAdjustments} 
@@ -867,11 +885,14 @@ const Index = () => {
                       userId={user.id}
                       onBrandAdjustmentsChange={setBrandAdjustments}
                     />
-                  </TabsContent>}
-              </Tabs>}
+                  </TabsContent>
+                )}
+              </Tabs>
+            )}
           </div>
         </div>
       </main>
-    </div>;
+    </div>
+  );
 };
 export default Index;
