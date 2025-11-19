@@ -129,8 +129,8 @@ export const SuggestedBudget = ({
       }
     });
 
-    // Marcas válidas: con ventas y presupuesto
-    const validBrands = Array.from(brandEmpresaData.entries())
+    // Marcas válidas: primero intentar con ventas y presupuesto, luego solo con ventas
+    let validBrands = Array.from(brandEmpresaData.entries())
       .filter(([, data]) => data.totalPresupuesto > 0 && data.totalVentas > 0)
       .map(([key, data]) => {
         const [marca] = key.split("|");
@@ -138,9 +138,22 @@ export const SuggestedBudget = ({
         return { marca, empresa: data.empresa, total: data.totalPresupuesto, promedioVenta };
       });
 
+    // Si no hay marcas con presupuesto histórico, usar solo ventas para calcular distribución
     if (validBrands.length === 0) {
-      toast.error("No hay marcas con ventas y presupuesto en los meses seleccionados");
-      return;
+      validBrands = Array.from(brandEmpresaData.entries())
+        .filter(([, data]) => data.totalVentas > 0)
+        .map(([key, data]) => {
+          const [marca] = key.split("|");
+          const promedioVenta = data.totalVentas / selectedMeses.length;
+          return { marca, empresa: data.empresa, total: promedioVenta, promedioVenta };
+        });
+      
+      if (validBrands.length === 0) {
+        toast.error("No hay marcas con ventas en los meses seleccionados");
+        return;
+      }
+      
+      toast.info("Calculando distribución basada en ventas históricas (sin presupuestos previos)");
     }
 
     const totalHistorical = validBrands.reduce((sum, item) => sum + item.total, 0);
