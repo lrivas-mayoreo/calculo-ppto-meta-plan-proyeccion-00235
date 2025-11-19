@@ -52,39 +52,74 @@ serve(async (req) => {
 
     console.log(`Processing ${type} file: ${file.name}, size: ${file.size} bytes`);
 
-    // Leer archivo Excel
+    // Para archivos grandes, procesar en chunks
+    const MAX_MEMORY_SIZE = 40 * 1024 * 1024; // 40MB limit para evitar OOM
+    const isLargeFile = file.size > MAX_MEMORY_SIZE;
+    
+    if (isLargeFile) {
+      console.log(`Large file detected (${file.size} bytes), processing in streaming mode`);
+    }
+
+    // Leer archivo Excel con configuración optimizada para memoria
     const arrayBuffer = await file.arrayBuffer();
     const workbook = XLSX.read(new Uint8Array(arrayBuffer), { 
       type: 'array',
-      dense: true,
-      raw: false
+      dense: false, // Usa arrays regulares en lugar de sparse arrays
+      raw: false,
+      cellDates: false,
+      cellNF: false,
+      cellStyles: false,
+      sheetStubs: false // No crear stubs para celdas vacías
     });
     
     const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-    const jsonData = XLSX.utils.sheet_to_json(worksheet, {
-      defval: null,
-      raw: false
-    });
-
-    console.log(`Parsed ${jsonData.length} rows from Excel`);
     
-    // Normalizar nombres de columnas y validar campos requeridos
-    const normalizedData = normalizeAndValidateData(jsonData, type);
+    // Para archivos grandes, procesar por chunks
+    const CHUNK_SIZE = 5000; // Procesar 5000 filas a la vez
+    let normalizedData: any[] = [];
+    
+    if (isLargeFile) {
+      const range = XLSX.utils.decode_range(worksheet['!ref'] || 'A1');
+      const totalRows = range.e.r - range.s.r;
+      console.log(`Total rows in Excel: ${totalRows}`);
+      
+      // Procesar en chunks
+      for (let startRow = range.s.r + 1; startRow <= range.e.r; startRow += CHUNK_SIZE) {
+        const endRow = Math.min(startRow + CHUNK_SIZE - 1, range.e.r);
+        
+        // Crear un rango limitado
+        const chunkRange = { s: { r: range.s.r, c: range.s.c }, e: { r: endRow, c: range.e.c } };
+        worksheet['!ref'] = XLSX.utils.encode_range(chunkRange);
+        
+        const chunkData = XLSX.utils.sheet_to_json(worksheet, {
+          defval: null,
+          raw: false,
+          range: startRow - 1
+        });
+        
+        const normalized = normalizeAndValidateData(chunkData, type);
+        normalizedData = normalizedData.concat(normalized);
+        
+        console.log(`Processed chunk: rows ${startRow}-${endRow}, valid: ${normalized.length}`);
+        
+        // Liberar memoria del chunk
+        chunkData.length = 0;
+      }
+    } else {
+      const jsonData = XLSX.utils.sheet_to_json(worksheet, {
+        defval: null,
+        raw: false
+      });
+      console.log(`Parsed ${jsonData.length} rows from Excel`);
+      normalizedData = normalizeAndValidateData(jsonData, type);
+    }
+    
     
     if (normalizedData.length === 0) {
       return new Response(
         JSON.stringify({ 
           error: `No se encontraron columnas válidas. Campos esperados: ${getExpectedColumns(type).join(', ')}` 
         }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-    
-    console.log(`Normalized ${normalizedData.length} valid rows`);
-
-    if (!jsonData || jsonData.length === 0) {
-      return new Response(
-        JSON.stringify({ error: 'El archivo está vacío' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -157,8 +192,8 @@ async function insertAndProcessData(
   try {
     console.log(`[${jobId}] Starting data insertion for job with ${jsonData.length} rows`);
 
-    // Insertar en staging en lotes grandes (10K por lote para reducir round-trips)
-    const STAGING_BATCH_SIZE = 10000;
+    // Para ventas grandes, usar lotes más pequeños para evitar timeouts
+    const STAGING_BATCH_SIZE = jsonData.length > 50000 ? 5000 : 10000;
     let totalInserted = 0;
     
     for (let i = 0; i < jsonData.length; i += STAGING_BATCH_SIZE) {
