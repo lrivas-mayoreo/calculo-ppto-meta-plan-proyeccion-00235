@@ -35,7 +35,7 @@ export const RoleManagement = () => {
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState<string | null>(null);
 
-  const roles: AppRole[] = ["administrador", "gerente", "admin_ventas"];
+  const roles: AppRole[] = ["administrador", "gerente", "admin_ventas", "vendedor"];
 
   useEffect(() => {
     loadUsers();
