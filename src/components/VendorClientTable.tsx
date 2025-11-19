@@ -25,6 +25,7 @@ interface VendorClientTableProps {
   marcasPresupuesto: Array<{ marca: string; empresa: string; presupuesto: number; fechaDestino: string }>;
   userId: string;
   onBrandAdjustmentsChange?: (adjustments: Record<string, number>) => void;
+  selectedVendor?: string;
 }
 
 interface VendorClientData {
@@ -40,7 +41,7 @@ interface VendorClientData {
   key: string;
 }
 
-export const VendorClientTable = ({ result, vendorAdjustments, presupuestoTotal, userRole, marcasPresupuesto, userId, onBrandAdjustmentsChange }: VendorClientTableProps) => {
+export const VendorClientTable = ({ result, vendorAdjustments, presupuestoTotal, userRole, marcasPresupuesto, userId, onBrandAdjustmentsChange, selectedVendor }: VendorClientTableProps) => {
   const [vendorClientData, setVendorClientData] = useState<VendorClientData[]>([]);
   const [manualAdjustments, setManualAdjustments] = useState<Record<string, number>>({});
   const [brandAdjustments, setBrandAdjustments] = useState<Record<string, number>>({});
