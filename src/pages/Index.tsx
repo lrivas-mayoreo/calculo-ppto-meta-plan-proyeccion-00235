@@ -547,20 +547,43 @@ const Index = () => {
                   mesesDisponibles={mesesDisponibles} 
                   onMarcasPresupuestoLoad={setMarcasPresupuesto} 
                   historicalBudgets={allHistoricalBudgets} 
-                  ventasData={ventas.map(v => {
+                  ventasData={(() => {
+                    // Create maps once, outside the map function
                     const marcasMap = new Map(marcas.map(m => [m.codigo, m.nombre]));
                     const clientesMap = new Map(clientes.map(c => [c.codigo, c.nombre]));
                     const vendedoresMap = new Map(vendedores.map(v => [v.codigo, v.nombre]));
-                    return {
-                      mesAnio: v.mes,
-                      marca: marcasMap.get(v.codigo_marca) || v.codigo_marca,
-                      cliente: clientesMap.get(v.codigo_cliente) || v.codigo_cliente,
-                      articulo: marcasMap.get(v.codigo_marca) || v.codigo_marca,
-                      vendedor: v.codigo_vendedor ? (vendedoresMap.get(v.codigo_vendedor) || v.codigo_vendedor) : 'Sin vendedor',
-                      empresa: "Empresa Alpha",
-                      venta: v.monto
-                    };
-                  })}
+                    
+                    const ventasTransformadas = ventas.map(v => {
+                      // Convert mes format from database to match mesesDisponibles format
+                      // Database format might be "2024-11" or "noviembre-2024"
+                      let mesAnio = v.mes;
+                      
+                      // If format is "YYYY-MM", convert to "mes-YYYY"
+                      if (v.mes.match(/^\d{4}-\d{2}$/)) {
+                        const [year, month] = v.mes.split('-');
+                        const date = new Date(parseInt(year), parseInt(month) - 1, 1);
+                        const mes = date.toLocaleString("es-ES", { month: "long" });
+                        mesAnio = `${mes}-${year}`;
+                      }
+                      
+                      return {
+                        mesAnio,
+                        marca: marcasMap.get(v.codigo_marca) || v.codigo_marca,
+                        cliente: clientesMap.get(v.codigo_cliente) || v.codigo_cliente,
+                        articulo: marcasMap.get(v.codigo_marca) || v.codigo_marca,
+                        vendedor: v.codigo_vendedor ? (vendedoresMap.get(v.codigo_vendedor) || v.codigo_vendedor) : 'Sin vendedor',
+                        empresa: "Empresa Alpha",
+                        venta: v.monto
+                      };
+                    });
+                    
+                    console.log('Ventas transformadas sample:', ventasTransformadas.slice(0, 3));
+                    console.log('Meses disponibles sample:', mesesDisponibles.slice(0, 3));
+                    console.log('Total ventas:', ventasTransformadas.length);
+                    console.log('Marcas disponibles:', marcas.map(m => m.nombre));
+                    
+                    return ventasTransformadas;
+                  })()}
                   vendorAdjustments={vendorAdjustments}
                   brandAdjustments={brandAdjustments}
                   presupuestoTotal={marcasPresupuesto.reduce((sum, mp) => sum + mp.presupuesto, 0)}
