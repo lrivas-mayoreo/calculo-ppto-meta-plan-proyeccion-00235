@@ -136,6 +136,18 @@ const Index = () => {
     presupuesto: number;
     fechaDestino: string;
   }>>([]);
+  
+  // Real data from Supabase
+  const [clientes, setClientes] = useState<Array<{ codigo: string; nombre: string }>>([]);
+  const [marcas, setMarcas] = useState<Array<{ codigo: string; nombre: string }>>([]);
+  const [vendedores, setVendedores] = useState<Array<{ codigo: string; nombre: string }>>([]);
+  const [ventas, setVentas] = useState<Array<{
+    mes: string;
+    codigo_marca: string;
+    codigo_cliente: string;
+    codigo_vendedor: string | null;
+    monto: number;
+  }>>([]);
   useEffect(() => {
     const {
       data: {
@@ -178,6 +190,19 @@ const Index = () => {
             }
           }
         }
+        
+        // Load real data from Supabase
+        const [clientesRes, marcasRes, vendedoresRes, ventasRes] = await Promise.all([
+          supabase.from("clientes").select("codigo, nombre").eq("user_id", session.user.id),
+          supabase.from("marcas").select("codigo, nombre").eq("user_id", session.user.id),
+          supabase.from("vendedores").select("codigo, nombre").eq("user_id", session.user.id),
+          supabase.from("ventas_reales").select("mes, codigo_marca, codigo_cliente, codigo_vendedor, monto").eq("user_id", session.user.id)
+        ]);
+        
+        if (clientesRes.data) setClientes(clientesRes.data);
+        if (marcasRes.data) setMarcas(marcasRes.data);
+        if (vendedoresRes.data) setVendedores(vendedoresRes.data);
+        if (ventasRes.data) setVentas(ventasRes.data);
       }
     });
     supabase.auth.getSession().then(async ({
@@ -221,6 +246,19 @@ const Index = () => {
             }
           }
         }
+        
+        // Load real data from Supabase
+        const [clientesRes, marcasRes, vendedoresRes, ventasRes] = await Promise.all([
+          supabase.from("clientes").select("codigo, nombre").eq("user_id", session.user.id),
+          supabase.from("marcas").select("codigo, nombre").eq("user_id", session.user.id),
+          supabase.from("vendedores").select("codigo, nombre").eq("user_id", session.user.id),
+          supabase.from("ventas_reales").select("mes, codigo_marca, codigo_cliente, codigo_vendedor, monto").eq("user_id", session.user.id)
+        ]);
+        
+        if (clientesRes.data) setClientes(clientesRes.data);
+        if (marcasRes.data) setMarcas(marcasRes.data);
+        if (vendedoresRes.data) setVendedores(vendedoresRes.data);
+        if (ventasRes.data) setVentas(ventasRes.data);
       }
     });
     return () => subscription.unsubscribe();
@@ -281,7 +319,7 @@ const Index = () => {
       }
 
       // Calcular promedio de ventas para esta marca
-      const sumaVentas = ventasMesesReferencia.reduce((sum, v) => sum + v.venta, 0);
+      const sumaVentas = ventasMesesReferencia.reduce((sum, v) => sum + v.monto, 0);
       const promedioVentaMarca = sumaVentas / mesesReferencia.length;
 
       // Validación Error 3: Marca sin ventas para distribuir
@@ -323,36 +361,33 @@ const Index = () => {
         });
       });
 
-      // Calcular distribución por cliente
-      const distribucionClientes = Array.from(ventasPorCliente.values()).map(clienteData => {
-        const articulosMap = new Map<string, number>();
+      const distribucionClientes: CalculationResult["resultadosMarcas"][0]["distribucionClientes"] = [];
+      ventasPorCliente.forEach(clienteData => {
+        const {
+          cliente,
+          vendedor
+        } = clienteData;
 
-        // Sumar ventas por artículo
-        clienteData.ventas.forEach(venta => {
-          const ventaActual = articulosMap.get(venta.articulo) || 0;
-          articulosMap.set(venta.articulo, ventaActual + venta.venta);
-        });
+        // Calcular promedio de ventas para este cliente
+        const sumaVentasCliente = clienteData.ventas.reduce((sum, v) => sum + v.monto, 0);
+        const promedioVentaCliente = sumaVentasCliente / mesesReferencia.length;
 
-        // Calcular promedio por artículo y aplicar factor
-        const articulos = Array.from(articulosMap.entries()).map(([articulo, ventaTotal]) => {
-          const ventaPromedio = ventaTotal / mesesReferencia.length;
-          const ventaAjustada = ventaPromedio * factorMarca;
-          const variacion = ventaAjustada - ventaPromedio;
-          return {
-            articulo,
-            ventaReal: ventaPromedio,
-            ventaAjustada,
-            variacion
-          };
+        // Calcular presupuesto ajustado para este cliente
+        const presupuestoAjustadoCliente = promedioVentaCliente * factorMarca;
+
+        // For now, create a single "article" entry with the client's total
+        distribucionClientes.push({
+          cliente,
+          vendedor,
+          empresa: empresa,
+          articulos: [{
+            articulo: marca, // Use marca as article name for now
+            ventaReal: promedioVentaCliente,
+            ventaAjustada: presupuestoAjustadoCliente,
+            variacion: presupuestoAjustadoCliente - promedioVentaCliente
+          }],
+          subtotal: presupuestoAjustadoCliente
         });
-        const subtotal = articulos.reduce((sum, art) => sum + art.ventaAjustada, 0);
-        return {
-          cliente: clienteData.cliente,
-          vendedor: clienteData.vendedor,
-          empresa: clienteData.empresa,
-          articulos,
-          subtotal
-        };
       });
       resultadosMarcas.push({
         marca,
@@ -502,14 +537,30 @@ const Index = () => {
                 <BudgetForm 
                   onCalculate={handleCalculate} 
                   mockData={{
-                    marcas: MOCK_DATA.marcas,
-                    empresas: MOCK_DATA.empresas,
-                    articulos: MOCK_DATA.articulos
+                    marcas: marcas.map(m => m.nombre),
+                    empresas: ["Empresa Alpha", "Empresa Beta", "Empresa Gamma"],
+                    articulos: marcas.reduce((acc, m) => {
+                      acc[m.nombre] = [m.nombre];
+                      return acc;
+                    }, {} as Record<string, string[]>)
                   }} 
                   mesesDisponibles={mesesDisponibles} 
                   onMarcasPresupuestoLoad={setMarcasPresupuesto} 
                   historicalBudgets={allHistoricalBudgets} 
-                  ventasData={MOCK_DATA.ventas}
+                  ventasData={ventas.map(v => {
+                    const marcasMap = new Map(marcas.map(m => [m.codigo, m.nombre]));
+                    const clientesMap = new Map(clientes.map(c => [c.codigo, c.nombre]));
+                    const vendedoresMap = new Map(vendedores.map(v => [v.codigo, v.nombre]));
+                    return {
+                      mesAnio: v.mes,
+                      marca: marcasMap.get(v.codigo_marca) || v.codigo_marca,
+                      cliente: clientesMap.get(v.codigo_cliente) || v.codigo_cliente,
+                      articulo: marcasMap.get(v.codigo_marca) || v.codigo_marca,
+                      vendedor: v.codigo_vendedor ? (vendedoresMap.get(v.codigo_vendedor) || v.codigo_vendedor) : 'Sin vendedor',
+                      empresa: "Empresa Alpha",
+                      venta: v.monto
+                    };
+                  })}
                   vendorAdjustments={vendorAdjustments}
                   brandAdjustments={brandAdjustments}
                   presupuestoTotal={marcasPresupuesto.reduce((sum, mp) => sum + mp.presupuesto, 0)}
