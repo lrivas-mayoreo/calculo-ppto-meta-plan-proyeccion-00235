@@ -96,18 +96,23 @@ export const SuggestedBudget = ({
       toast.error("Seleccione una fecha destino");
       return;
     }
-    if (filteredHistoricalData.length === 0) {
-      toast.error("No hay datos históricos en los meses seleccionados");
-      return;
-    }
 
     const budget = parseFloat(totalBudget);
+
+    console.log('Calculating suggestion...');
+    console.log('Selected meses:', selectedMeses);
+    console.log('Ventas data sample:', ventasData.slice(0, 3));
+    console.log('Total ventas data:', ventasData.length);
 
     // Promedio = Σ(Ventas en Meses de Referencia) / Cantidad de Meses de Referencia
     const brandEmpresaData = new Map<string, { empresa: string; totalVentas: number; totalPresupuesto: number }>();
 
     // Ventas de los meses seleccionados
     const ventasMesesSeleccionados = ventasData.filter((v) => selectedMeses.includes(v.mesAnio));
+    
+    console.log('Ventas meses seleccionados:', ventasMesesSeleccionados.length);
+    console.log('Sample filtered ventas:', ventasMesesSeleccionados.slice(0, 3));
+    
     ventasMesesSeleccionados.forEach((venta) => {
       const key = `${venta.marca}|${venta.empresa}`;
       const current = brandEmpresaData.get(key);
@@ -128,6 +133,8 @@ export const SuggestedBudget = ({
         brandEmpresaData.set(key, { empresa: item.empresa, totalVentas: 0, totalPresupuesto: item.presupuesto });
       }
     });
+
+    console.log('Brand empresa data:', Array.from(brandEmpresaData.entries()));
 
     // Marcas válidas: primero intentar con ventas y presupuesto, luego solo con ventas
     let validBrands = Array.from(brandEmpresaData.entries())
