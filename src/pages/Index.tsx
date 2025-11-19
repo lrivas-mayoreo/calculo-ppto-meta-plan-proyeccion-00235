@@ -8,7 +8,6 @@ import { MetricsCard } from "@/components/MetricsCard";
 import { VendorAdjustment } from "@/components/VendorAdjustment";
 import { VendorClientTable } from "@/components/VendorClientTable";
 import { RoleManagement } from "@/components/RoleManagement";
-import { VendorBudgetDistribution } from "@/components/VendorBudgetDistribution";
 import { FormulaExplanation } from "@/components/FormulaExplanation";
 import { SuggestedBudget } from "@/components/SuggestedBudget";
 import { DataImport } from "@/components/DataImport";
@@ -122,8 +121,6 @@ const Index = () => {
   const [user, setUser] = useState<User | null>(null);
   const [userRole, setUserRole] = useState<string | null>(null);
   const [simulatedRole, setSimulatedRole] = useState<string | null>(null);
-  const [selectedVendor, setSelectedVendor] = useState<string | null>(null);
-  const [availableVendors, setAvailableVendors] = useState<Array<{ codigo: string; nombre: string }>>([]);
   const [result, setResult] = useState<CalculationResult | null>(null);
   const [marcasPresupuesto, setMarcasPresupuesto] = useState<MarcaPresupuesto[]>([]);
   const [vendorAdjustments, setVendorAdjustments] = useState<Record<string, {
@@ -155,18 +152,6 @@ const Index = () => {
         const role = roleData?.role || null;
         setUserRole(role);
         setSimulatedRole(role);
-
-        // Load vendors for vendedor role
-        if (role === 'vendedor' || role === 'administrador') {
-          const { data: vendors } = await supabase
-            .from("vendedores")
-            .select("codigo, nombre")
-            .eq("user_id", session.user.id);
-          
-          if (vendors) {
-            setAvailableVendors(vendors);
-          }
-        }
 
         // Load historical budgets from database
         const {
@@ -431,18 +416,9 @@ const Index = () => {
   }, {
     value: "admin_ventas",
     label: "Admin. Ventas"
-  }, {
-    value: "vendedor",
-    label: "Vendedor"
   }];
   const handleRoleChange = (newRole: string) => {
     setSimulatedRole(newRole);
-    
-    // Reset vendor selection when switching to vendedor role
-    if (newRole === 'vendedor') {
-      setSelectedVendor(null);
-    }
-    
     toast.info(`Vista cambiada a: ${availableRoles.find(r => r.value === newRole)?.label}`);
   };
   return <div className="min-h-screen bg-background">
@@ -470,7 +446,7 @@ const Index = () => {
                     {userRole ? <>
                         <span className="text-xs font-semibold text-primary bg-primary/10 px-3 py-1 rounded-full border border-primary/20">
                           <Shield className="h-3 w-3 inline mr-1" />
-                          {userRole === "admin_ventas" ? "Admin. Ventas" : userRole === "administrador" ? "Administrador" : userRole === "gerente" ? "Gerente" : userRole === "vendedor" ? "Vendedor" : userRole}
+                          {userRole === "admin_ventas" ? "Admin. Ventas" : userRole === "administrador" ? "Administrador" : userRole === "gerente" ? "Gerente" : userRole}
                         </span>
                         <Select value={activeRole || undefined} onValueChange={handleRoleChange}>
                           <SelectTrigger className="h-7 w-[140px] text-xs">
@@ -482,20 +458,6 @@ const Index = () => {
                               </SelectItem>)}
                           </SelectContent>
                         </Select>
-                        {activeRole === 'vendedor' && (
-                          <Select value={selectedVendor || undefined} onValueChange={setSelectedVendor}>
-                            <SelectTrigger className="h-7 w-[180px] text-xs">
-                              <SelectValue placeholder="Seleccionar vendedor" />
-                            </SelectTrigger>
-                            <SelectContent className="bg-card z-50">
-                              {availableVendors.map(vendor => (
-                                <SelectItem key={vendor.codigo} value={vendor.codigo}>
-                                  {vendor.nombre}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        )}
                       </> : <span className="text-xs text-muted-foreground bg-muted px-3 py-1 rounded-full">
                         Sin rol asignado
                       </span>}
@@ -532,8 +494,7 @@ const Index = () => {
           </Card>
 
           <div>
-            {activeRole === "administrador" ? (
-              <Tabs defaultValue="results" className="space-y-6">
+            {activeRole === "administrador" ? <Tabs defaultValue="results" className="space-y-6">
                 <TabsList className="grid w-full grid-cols-4 h-auto">
                   <TabsTrigger value="results" className="text-sm">Parámetros</TabsTrigger>
                   <TabsTrigger value="vendors" disabled={!result} className="text-sm">Vendedores-Clientes</TabsTrigger>
@@ -545,190 +506,7 @@ const Index = () => {
                 </TabsList>
 
                 <TabsContent value="results" className="space-y-6">
-                  <div className="space-y-6">
-                    <Card className="p-6">
-                      <div className="space-y-4">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <h2 className="text-xl font-semibold text-foreground">Vista de Vendedor</h2>
-                            <p className="text-sm text-muted-foreground">
-                              Vendedor: {availableVendors.find(v => v.codigo === selectedVendor)?.nombre}
-                            </p>
-                          </div>
-                          {result && (
-                            <VendorBudgetDistribution
-                              result={result}
-                              vendorCode={selectedVendor}
-                              onDistribute={() => {
-                                toast.success("Distribución aplicada correctamente");
-                              }}
-                            />
-                          )}
-                        </div>
-                      </div>
-                    </Card>
-
-                    {result && (
-                      <VendorClientTable
-                        result={result}
-                        vendorAdjustments={vendorAdjustments}
-                        presupuestoTotal={result.totalPresupuesto}
-                        userRole={activeRole}
-                        marcasPresupuesto={marcasPresupuesto}
-                        userId={user.id}
-                        onBrandAdjustmentsChange={setBrandAdjustments}
-                        selectedVendor={selectedVendor}
-                      />
-                    )}
-                  </div>
-                ) : (
-                  <Card className="p-6">
-                    <div className="text-center py-8">
-                      <Users className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                      <h3 className="text-lg font-semibold text-foreground mb-2">
-                        Seleccione un Vendedor
-                      </h3>
-                      <p className="text-sm text-muted-foreground">
-                        Por favor seleccione un vendedor en el selector de arriba para ver sus datos
-                      </p>
-                    </div>
-                  </Card>
-                )
-              ) : activeRole === "vendedor" ? (
-                selectedVendor ? (
-                  <div className="space-y-6">
-                    <Card className="p-6">
-                      <div className="space-y-4">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <h2 className="text-xl font-semibold text-foreground">Vista de Vendedor</h2>
-                            <p className="text-sm text-muted-foreground">
-                              Vendedor: {availableVendors.find(v => v.codigo === selectedVendor)?.nombre}
-                            </p>
-                          </div>
-                          {result && (
-                            <VendorBudgetDistribution
-                              result={result}
-                              vendorCode={selectedVendor}
-                              onDistribute={() => {
-                                toast.success("Distribución aplicada correctamente");
-                              }}
-                            />
-                          )}
-                        </div>
-                      </div>
-                    </Card>
-
-                    {result && (
-                      <VendorClientTable
-                        result={result}
-                        vendorAdjustments={vendorAdjustments}
-                        presupuestoTotal={result.totalPresupuesto}
-                        userRole={activeRole}
-                        marcasPresupuesto={marcasPresupuesto}
-                        userId={user.id}
-                        onBrandAdjustmentsChange={setBrandAdjustments}
-                      />
-                    )}
-                  </div>
-                ) : (
-                  <Card className="p-6">
-                    <div className="text-center py-8">
-                      <Users className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                      <h3 className="text-lg font-semibold text-foreground mb-2">
-                        Seleccione un Vendedor
-                      </h3>
-                      <p className="text-sm text-muted-foreground">
-                        Por favor seleccione un vendedor en el selector de arriba para ver sus datos
-                      </p>
-                    </div>
-                  </Card>
-                </TabsContent>
-
-                <TabsContent value="vendors">
-                  {result && (
-                    <VendorClientTable
-                      result={result}
-                      vendorAdjustments={vendorAdjustments}
-                      presupuestoTotal={result.resultadosMarcas.reduce((sum, m) => 
-                        sum + m.distribucionClientes.reduce((s, c) => s + c.subtotal, 0), 0
-                      )}
-                      userRole={activeRole}
-                      marcasPresupuesto={marcasPresupuesto}
-                      userId={user.id}
-                      onBrandAdjustmentsChange={setBrandAdjustments}
-                    />
-                  )}
-                </TabsContent>
-
-                <TabsContent value="import">
-                  <DataImport />
-                </TabsContent>
-
-                <TabsContent value="roles">
-                  <RoleManagement />
-                </TabsContent>
-              </Tabs>
-            ) : activeRole === "vendedor" ? (
-              selectedVendor ? (
-                <div className="space-y-6">
-                  <Card className="p-6">
-                    <div className="space-y-4">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <h2 className="text-xl font-semibold text-foreground">Vista de Vendedor</h2>
-                          <p className="text-sm text-muted-foreground">
-                            Vendedor: {availableVendors.find(v => v.codigo === selectedVendor)?.nombre}
-                          </p>
-                        </div>
-                        {result && (
-                          <VendorBudgetDistribution
-                            result={result}
-                            vendorCode={selectedVendor}
-                            onDistribute={() => {
-                              toast.success("Distribución aplicada correctamente");
-                            }}
-                          />
-                        )}
-                      </div>
-                    </div>
-                  </Card>
-
-                  {result && (
-                    <VendorClientTable
-                      result={result}
-                      vendorAdjustments={vendorAdjustments}
-                      presupuestoTotal={result.totalPresupuesto}
-                      userRole={activeRole}
-                      marcasPresupuesto={marcasPresupuesto}
-                      userId={user.id}
-                      onBrandAdjustmentsChange={setBrandAdjustments}
-                      selectedVendor={selectedVendor}
-                    />
-                  )}
-                </div>
-              ) : (
-                <Card className="p-6">
-                  <div className="text-center py-8">
-                    <Users className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                    <h3 className="text-lg font-semibold text-foreground mb-2">
-                      Seleccione un Vendedor
-                    </h3>
-                    <p className="text-sm text-muted-foreground">
-                      Por favor seleccione un vendedor en el selector de arriba para ver sus datos
-                    </p>
-                  </div>
-                </Card>
-              )
-            ) : (
-              <Tabs defaultValue="results" className="space-y-6">
-                <TabsList className={`grid w-full ${activeRole === "gerente" || activeRole === "admin_ventas" ? "grid-cols-2" : "grid-cols-1"}`}>
-                  <TabsTrigger value="results">Parámetros</TabsTrigger>
-                  {(activeRole === "gerente" || activeRole === "admin_ventas") && <TabsTrigger value="vendors">Vendedores-Clientes</TabsTrigger>}
-                </TabsList>
-
-                <TabsContent value="results" className="space-y-6">
-                  {result && (activeRole === "gerente" || activeRole === "admin_ventas") && vendedoresUnicos.length > 0 && <Card className="p-4">
+                  {result && activeRole === "administrador" && vendedoresUnicos.length > 0 && <Card className="p-4">
                       <VendorAdjustment 
                         vendedores={vendedoresUnicos} 
                         presupuestoTotal={result.resultadosMarcas.reduce((sum, m) => 
@@ -807,6 +585,20 @@ const Index = () => {
                     />
                   </TabsContent>}
 
+                <TabsContent value="import">
+                  <DataImport />
+                </TabsContent>
+
+                <TabsContent value="roles">
+                  <RoleManagement />
+                </TabsContent>
+              </Tabs> : <Tabs defaultValue="results" className="space-y-6">
+                <TabsList className={`grid w-full ${activeRole === "gerente" || activeRole === "admin_ventas" ? "grid-cols-2" : "grid-cols-1"}`}>
+                  <TabsTrigger value="results">Parámetros</TabsTrigger>
+                  {(activeRole === "gerente" || activeRole === "admin_ventas") && <TabsTrigger value="vendors">Vendedores-Clientes</TabsTrigger>}
+                </TabsList>
+
+                <TabsContent value="results" className="space-y-6">
                   {result && (activeRole === "administrador" || activeRole === "gerente" || activeRole === "admin_ventas") && vendedoresUnicos.length > 0 && <Card className="p-4">
                       <VendorAdjustment 
                         vendedores={vendedoresUnicos} 
@@ -872,8 +664,7 @@ const Index = () => {
                   </>}
                 </TabsContent>
 
-                {result && (activeRole === "gerente" || activeRole === "admin_ventas") && (
-                  <TabsContent value="vendors">
+                {result && (activeRole === "gerente" || activeRole === "admin_ventas") && <TabsContent value="vendors">
                     <VendorClientTable 
                       result={result} 
                       vendorAdjustments={vendorAdjustments} 
@@ -885,14 +676,11 @@ const Index = () => {
                       userId={user.id}
                       onBrandAdjustmentsChange={setBrandAdjustments}
                     />
-                  </TabsContent>
-                )}
-              </Tabs>
-            )}
+                  </TabsContent>}
+              </Tabs>}
           </div>
         </div>
       </main>
-    </div>
-  );
+    </div>;
 };
 export default Index;

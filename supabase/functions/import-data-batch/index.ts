@@ -88,93 +88,62 @@ serve(async (req) => {
 
     console.log(`[${jobId}] Batch inserted successfully: ${batch.length} rows`);
 
-    // Si es el último batch, iniciar procesamiento en background
+    // Si es el último batch, iniciar procesamiento
     if (isLastBatch) {
       console.log(`[${jobId}] Last batch received, starting processing`);
       
-      // Responder inmediatamente al cliente
-      const response = new Response(
-        JSON.stringify({ 
-          success: true, 
-          message: 'Procesamiento iniciado',
-          jobId 
-        }),
-        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      // Procesar en lotes desde staging
+      let hasMore = true;
+      const PROCESS_BATCH_SIZE = 1000;
 
-      // Procesar en background sin bloquear la respuesta
-      (async () => {
-        try {
-          let hasMore = true;
-          const PROCESS_BATCH_SIZE = 500; // Reducir a 500 para evitar timeouts
+      while (hasMore) {
+        const { data: result, error } = await supabaseClient
+          .rpc('process_import_batch', {
+            p_job_id: jobId,
+            p_batch_size: PROCESS_BATCH_SIZE
+          });
 
-          while (hasMore) {
-            const { data: result, error } = await supabaseClient
-              .rpc('process_import_batch', {
-                p_job_id: jobId,
-                p_batch_size: PROCESS_BATCH_SIZE
-              });
-
-            if (error) {
-              console.error(`[${jobId}] Error processing:`, error);
-              await supabaseClient
-                .from('import_jobs')
-                .update({ 
-                  status: 'failed',
-                  error_message: error.message 
-                })
-                .eq('id', jobId);
-              break;
-            }
-
-            const processed = result[0]?.processed || 0;
-            hasMore = processed > 0;
-            
-            console.log(`[${jobId}] Processed ${processed} rows`);
-            
-            // Pequeña pausa para liberar recursos
-            if (hasMore) {
-              await new Promise(resolve => setTimeout(resolve, 100));
-            }
-          }
-
-          // Marcar como completado
-          const { data: finalJob } = await supabaseClient
-            .from('import_jobs')
-            .select('processed_rows, error_count')
-            .eq('id', jobId)
-            .single();
-
-          if (finalJob) {
-            await supabaseClient
-              .from('import_jobs')
-              .update({ 
-                status: 'completed',
-                success_count: finalJob.processed_rows - finalJob.error_count
-              })
-              .eq('id', jobId);
-          }
-          
-          // Limpiar staging
-          await supabaseClient
-            .from('import_staging')
-            .delete()
-            .eq('job_id', jobId);
-            
-          console.log(`[${jobId}] Processing completed and cleaned up`);
-        } catch (bgError) {
-          console.error(`[${jobId}] Background processing error:`, bgError);
+        if (error) {
+          console.error(`[${jobId}] Error processing:`, error);
           await supabaseClient
             .from('import_jobs')
             .update({ 
               status: 'failed',
-              error_message: String(bgError)
+              error_message: error.message 
             })
             .eq('id', jobId);
+          break;
         }
-      })();
 
-      return response;
+        const processed = result[0]?.processed || 0;
+        hasMore = processed > 0;
+        console.log(`[${jobId}] Processed ${processed} records`);
+      }
+
+      // Marcar como completado
+      const { data: finalJob } = await supabaseClient
+        .from('import_jobs')
+        .select('processed_rows, error_count')
+        .eq('id', jobId)
+        .single();
+
+      if (finalJob) {
+        await supabaseClient
+          .from('import_jobs')
+          .update({ 
+            status: 'completed',
+            success_count: finalJob.processed_rows - finalJob.error_count
+          })
+          .eq('id', jobId);
+      }
+
+      // Limpiar staging
+      await supabaseClient
+        .from('import_staging')
+        .delete()
+        .eq('job_id', jobId);
+
+      console.log(`[${jobId}] Processing completed`);
     }
 
     return new Response(
