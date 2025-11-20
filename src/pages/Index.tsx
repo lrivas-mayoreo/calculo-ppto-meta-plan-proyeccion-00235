@@ -268,6 +268,13 @@ const Index = () => {
     navigate("/auth");
   };
   const handleCalculate = (marcasPresupuesto: MarcaPresupuesto[], mesesReferencia: string[]) => {
+    console.log('🎯 Iniciando cálculo con:', { 
+      marcasCount: marcasPresupuesto.length, 
+      mesesReferencia,
+      ventasCount: ventas.length,
+      marcasDBCount: marcas.length
+    });
+    
     const resultadosMarcas: CalculationResult["resultadosMarcas"] = [];
     const errores: CalculationResult["errores"] = [];
     let totalPresupuestoGeneral = 0;
@@ -278,6 +285,33 @@ const Index = () => {
     const clientesMap = new Map(clientes.map(c => [c.codigo, c.nombre]));
     const vendedoresMap = new Map(vendedores.map(v => [v.codigo, v.nombre]));
     
+    // Transform ventas to have mesAnio in correct format
+    const ventasTransformadas = ventas.map(v => {
+      let mesAnio = v.mes;
+      
+      // Convert database format to "mes-YYYY" format
+      if (v.mes.match(/^\d{4}-\d{2}$/)) {
+        const [year, month] = v.mes.split('-');
+        const date = new Date(parseInt(year), parseInt(month) - 1, 1);
+        const mes = date.toLocaleString("es-ES", { month: "long" });
+        mesAnio = `${mes}-${year}`;
+      } else if (v.mes.match(/^\d{4}\/\d{2}\/\d{2}$/)) {
+        // Handle YYYY/MM/DD format
+        const [year, month] = v.mes.split('/');
+        const date = new Date(parseInt(year), parseInt(month) - 1, 1);
+        const mes = date.toLocaleString("es-ES", { month: "long" });
+        mesAnio = `${mes}-${year}`;
+      }
+      
+      return {
+        ...v,
+        mesAnio
+      };
+    });
+    
+    console.log('📊 Ventas transformadas (muestra):', ventasTransformadas.slice(0, 3));
+    console.log('📊 Meses disponibles en ventas:', [...new Set(ventasTransformadas.map(v => v.mesAnio))]);
+    
     marcasPresupuesto.forEach(marcaPresupuesto => {
       const {
         marca,
@@ -286,11 +320,19 @@ const Index = () => {
         presupuesto
       } = marcaPresupuesto;
 
-      // Find marca codigo from nombre
-      const marcaCodigo = Array.from(marcasMap.entries()).find(([_, nombre]) => nombre === marca)?.[0];
+      console.log('🔍 Procesando marca:', marca);
+
+      // Find marca codigo from nombre (case-insensitive)
+      const marcaCodigo = Array.from(marcasMap.entries()).find(([_, nombre]) => 
+        nombre.toLowerCase().trim() === marca.toLowerCase().trim()
+      )?.[0];
+      
+      console.log('🔍 Código encontrado para', marca, ':', marcaCodigo);
       
       // Validación Error 1: Marca no existe
       if (!marcaCodigo) {
+        console.error('❌ Marca no encontrada en BD:', marca);
+        console.log('📋 Marcas disponibles:', Array.from(marcasMap.values()));
         errores.push({
           tipo: 1,
           marca,
@@ -301,13 +343,19 @@ const Index = () => {
         return;
       }
 
-      // Obtener ventas de los meses de referencia para esta marca
-      const ventasMesesReferencia = ventas.filter(v => 
-        mesesReferencia.includes(v.mes) && v.codigo_marca === marcaCodigo
+      // Obtener ventas de los meses de referencia para esta marca usando ventas transformadas
+      const ventasMesesReferencia = ventasTransformadas.filter(v => 
+        mesesReferencia.includes(v.mesAnio) && v.codigo_marca === marcaCodigo
       );
+      
+      console.log('📊 Ventas encontradas para', marca, ':', ventasMesesReferencia.length);
 
       // Validación Error 4: Marca sin ventas en meses de referencia
       if (ventasMesesReferencia.length === 0) {
+        console.error('❌ No hay ventas para', marca, 'en meses:', mesesReferencia);
+        console.log('📊 Ventas de esta marca en otros meses:', 
+          ventasTransformadas.filter(v => v.codigo_marca === marcaCodigo).map(v => v.mesAnio)
+        );
         errores.push({
           tipo: 4,
           marca,
@@ -321,9 +369,12 @@ const Index = () => {
       // Calcular promedio de ventas para esta marca
       const sumaVentas = ventasMesesReferencia.reduce((sum, v) => sum + v.monto, 0);
       const promedioVentaMarca = sumaVentas / mesesReferencia.length;
+      
+      console.log('💰 Promedio de venta para', marca, ':', promedioVentaMarca);
 
       // Validación Error 3: Marca sin ventas para distribuir
       if (promedioVentaMarca === 0) {
+        console.error('❌ Promedio de venta es 0 para', marca);
         errores.push({
           tipo: 3,
           marca,
@@ -337,6 +388,8 @@ const Index = () => {
       // Calcular factor de ajuste a nivel de marca
       const factorMarca = presupuesto / promedioVentaMarca;
       const porcentajeCambio = (factorMarca - 1) * 100;
+      
+      console.log('📈 Factor y % cambio para', marca, ':', { factorMarca, porcentajeCambio });
 
       // Agrupar ventas por cliente para esta marca
       const ventasPorCliente = new Map<string, {
@@ -356,10 +409,12 @@ const Index = () => {
           });
         }
         ventasPorCliente.get(clienteNombre)!.ventas.push({
-          mes: venta.mes,
+          mes: venta.mesAnio,
           monto: venta.monto
         });
       });
+      
+      console.log('👥 Clientes encontrados para', marca, ':', ventasPorCliente.size);
 
       const distribucionClientes: CalculationResult["resultadosMarcas"][0]["distribucionClientes"] = [];
       ventasPorCliente.forEach(clienteData => {
@@ -401,6 +456,16 @@ const Index = () => {
       totalPresupuestoGeneral += presupuesto;
       totalPromedioReferenciaGeneral += promedioVentaMarca;
     });
+
+    console.log('✅ Cálculo completado:', {
+      marcasCalculadas: resultadosMarcas.length,
+      errores: errores.length,
+      totalPresupuesto: totalPresupuestoGeneral
+    });
+    
+    if (errores.length > 0) {
+      console.error('❌ Errores encontrados:', errores);
+    }
 
     // Store historical budget data for suggestions in database
     const historicalBudgets = marcasPresupuesto.map(mp => ({
