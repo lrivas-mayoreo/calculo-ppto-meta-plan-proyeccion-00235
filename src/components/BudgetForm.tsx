@@ -292,13 +292,18 @@ export const BudgetForm = ({
               mesesDisponibles={mesesDisponibles}
               ventasData={ventasData}
               onApplySuggestion={(marcas, mesesReferencia) => {
+                console.log('🎯 Aplicando presupuesto sugerido:', { 
+                  marcasCount: marcas.length, 
+                  mesesReferenciaCount: mesesReferencia.length 
+                });
                 setMarcasPresupuesto(marcas);
                 setMesesReferencia(mesesReferencia);
                 onMarcasPresupuestoLoad(marcas);
                 // Automatically trigger calculation with the suggested budget
                 setTimeout(() => {
+                  console.log('🔄 Iniciando cálculo automático de distribución...');
                   onCalculate(marcas, mesesReferencia);
-                  toast.success("Distribución calculada automáticamente con datos de Supabase");
+                  toast.success("Distribución calculada automáticamente por marca, vendedor, cliente y artículo");
                 }, 100);
               }}
             />
