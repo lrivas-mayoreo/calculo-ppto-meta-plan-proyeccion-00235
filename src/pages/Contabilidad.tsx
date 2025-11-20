@@ -36,14 +36,13 @@ const Contabilidad = () => {
       return;
     }
 
-    const { data: roleData } = await supabase
+    const { data: roles } = await supabase
       .from("user_roles")
       .select("role")
       .eq("user_id", user.id)
-      .eq("role", "contabilidad")
-      .single();
+      .in("role", ["contabilidad", "administrador"]);
 
-    if (!roleData) {
+    if (!roles || roles.length === 0) {
       toast.error("No tiene permisos de contabilidad");
       navigate("/");
     }
