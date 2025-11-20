@@ -37,6 +37,7 @@ interface SuggestedBudgetProps {
   }>;
   onApplySuggestion: (
     marcas: Array<{ marca: string; fechaDestino: string; empresa: string; presupuesto: number }>,
+    mesesReferencia: string[]
   ) => void;
 }
 
@@ -200,8 +201,8 @@ export const SuggestedBudget = ({
       presupuesto: item.monto,
     }));
 
-    onApplySuggestion(marcasPresupuesto);
-    toast.success("Presupuesto sugerido aplicado exitosamente");
+    onApplySuggestion(marcasPresupuesto, selectedMeses);
+    toast.success("Presupuesto sugerido aplicado y distribución calculada");
     setIsOpen(false);
     resetForm();
   };
