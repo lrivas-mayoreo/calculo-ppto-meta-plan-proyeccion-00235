@@ -576,7 +576,7 @@ const Index = () => {
                     {userRole ? <>
                         <span className="text-xs font-semibold text-primary bg-primary/10 px-3 py-1 rounded-full border border-primary/20">
                           <Shield className="h-3 w-3 inline mr-1" />
-                          {userRole === "admin_ventas" ? "Admin. Ventas" : userRole === "administrador" ? "Administrador" : userRole === "gerente" ? "Gerente" : userRole === "vendedor" ? "Vendedor" : userRole}
+                          {userRole === "admin_ventas" ? "Admin. Ventas" : userRole === "administrador" ? "Administrador" : userRole === "gerente" ? "Gerente" : userRole === "vendedor" ? "Vendedor" : userRole === "contabilidad" ? "Contabilidad" : userRole}
                         </span>
                         <Select value={activeRole || undefined} onValueChange={handleRoleChange}>
                           <SelectTrigger className="h-7 w-[140px] text-xs">
@@ -594,6 +594,11 @@ const Index = () => {
                   </div>
                 </div>
               </div>
+              {activeRole === "contabilidad" && (
+                <Button variant="default" size="sm" onClick={() => navigate("/contabilidad")}>
+                  Cargar Presupuesto
+                </Button>
+              )}
               <Button variant="outline" size="sm" onClick={handleSignOut}>
                 <LogOut className="h-4 w-4 mr-2" />
                 Cerrar Sesión
