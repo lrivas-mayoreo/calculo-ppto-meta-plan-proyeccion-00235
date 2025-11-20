@@ -398,8 +398,18 @@ const Index = () => {
         ventas: Array<{mes: string; monto: number}>;
       }>();
       ventasMesesReferencia.forEach(venta => {
-        const clienteNombre = clientesMap.get(venta.codigo_cliente) || venta.codigo_cliente;
-        const vendedorNombre = venta.codigo_vendedor ? (vendedoresMap.get(venta.codigo_vendedor) || venta.codigo_vendedor) : 'Sin vendedor';
+        // Always use client name, never fallback to code
+        const clienteNombre = clientesMap.get(venta.codigo_cliente);
+        
+        // Skip if client name not found (data integrity issue)
+        if (!clienteNombre) {
+          console.warn(`Cliente no encontrado para código: ${venta.codigo_cliente}`);
+          return;
+        }
+        
+        const vendedorNombre = venta.codigo_vendedor 
+          ? (vendedoresMap.get(venta.codigo_vendedor) || 'Sin vendedor') 
+          : 'Sin vendedor';
         
         if (!ventasPorCliente.has(clienteNombre)) {
           ventasPorCliente.set(clienteNombre, {
@@ -631,16 +641,22 @@ const Index = () => {
                         mesAnio = `${mes}-${year}`;
                       }
                       
+                      // Only include if client name is found
+                      const clienteNombre = clientesMap.get(v.codigo_cliente);
+                      if (!clienteNombre) return null;
+                      
                       return {
                         mesAnio,
                         marca: marcasMap.get(v.codigo_marca) || v.codigo_marca,
-                        cliente: clientesMap.get(v.codigo_cliente) || v.codigo_cliente,
+                        cliente: clienteNombre,
                         articulo: marcasMap.get(v.codigo_marca) || v.codigo_marca,
-                        vendedor: v.codigo_vendedor ? (vendedoresMap.get(v.codigo_vendedor) || v.codigo_vendedor) : 'Sin vendedor',
+                        vendedor: v.codigo_vendedor 
+                          ? (vendedoresMap.get(v.codigo_vendedor) || v.codigo_vendedor)
+                          : 'Sin vendedor',
                         empresa: "Empresa Alpha",
                         venta: v.monto
                       };
-                    });
+                    }).filter((v): v is NonNullable<typeof v> => v !== null);
                     
                     console.log('Ventas transformadas sample:', ventasTransformadas.slice(0, 3));
                     console.log('Meses disponibles sample:', mesesDisponibles.slice(0, 3));

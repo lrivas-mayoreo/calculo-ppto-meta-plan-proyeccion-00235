@@ -80,14 +80,14 @@ export const VendorClientTable = ({ result, vendorAdjustments, presupuestoTotal,
     
     console.log("=== DEBUG VENTAS MES ANTERIOR ===");
     
-    // Load all codes mappings
+    // Load all codes mappings - need both directions
     const [clientsRes, brandsRes] = await Promise.all([
       supabase.from('clientes').select('nombre, codigo').eq('user_id', user.id),
       supabase.from('marcas').select('nombre, codigo').eq('user_id', user.id),
     ]);
     
-    console.log("Clientes cargados:", clientsRes.data?.length || 0, clientsRes.data);
-    console.log("Marcas cargadas:", brandsRes.data?.length || 0, brandsRes.data);
+    console.log("Clientes cargados:", clientsRes.data?.length || 0);
+    console.log("Marcas cargadas:", brandsRes.data?.length || 0);
     
     const clientCodes = new Map(clientsRes.data?.map(c => [c.nombre, c.codigo]) || []);
     const brandCodes = new Map(brandsRes.data?.map(b => [b.nombre, b.codigo]) || []);
@@ -96,7 +96,7 @@ export const VendorClientTable = ({ result, vendorAdjustments, presupuestoTotal,
       const previousMonth = getPreviousMonth(marca.fechaDestino);
       const codigoMarca = brandCodes.get(marca.marca);
       
-      console.log(`Marca: ${marca.marca}, Fecha destino: ${marca.fechaDestino}, Mes anterior: ${previousMonth}, Código: ${codigoMarca}`);
+      console.log(`Marca: ${marca.marca}, Mes anterior: ${previousMonth}, Código: ${codigoMarca}`);
       
       if (!codigoMarca) {
         console.warn(`No se encontró código para marca: ${marca.marca}`);
@@ -104,12 +104,14 @@ export const VendorClientTable = ({ result, vendorAdjustments, presupuestoTotal,
       }
       
       // Get unique clients and vendors from this brand
-      for (const cliente of marca.distribucionClientes) {
-        const key = `${cliente.vendedor}-${cliente.cliente}-${marca.marca}`;
-        const codigoCliente = clientCodes.get(cliente.cliente);
+      for (const distribucion of marca.distribucionClientes) {
+        // distribucion.cliente is already a name from the calculation
+        const clienteNombre = distribucion.cliente;
+        const codigoCliente = clientCodes.get(clienteNombre);
+        const key = `${distribucion.vendedor}-${clienteNombre}-${marca.marca}`;
         
         if (!codigoCliente) {
-          console.warn(`No se encontró código para cliente: ${cliente.cliente}`);
+          console.warn(`No se encontró código para cliente: ${clienteNombre}`);
           salesByKey[key] = 0;
           continue;
         }
