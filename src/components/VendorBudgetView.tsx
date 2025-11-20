@@ -71,35 +71,86 @@ export const VendorBudgetView = () => {
 
   const loadDistributions = async (budget: Budget) => {
     try {
-      // Obtener ventas reales para calcular distribución original
-      const { data: ventas, error } = await supabase
+      setLoading(true);
+      
+      // Obtener el user_id actual
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        toast.error("Usuario no autenticado");
+        return;
+      }
+
+      // Primero, obtener el código de la marca desde la tabla marcas
+      const { data: marcaData, error: marcaError } = await supabase
+        .from('marcas')
+        .select('codigo')
+        .eq('nombre', budget.marca)
+        .eq('user_id', user.id)
+        .single();
+
+      if (marcaError) {
+        console.error("Error al buscar código de marca:", marcaError);
+        toast.error("No se encontró el código de la marca");
+        return;
+      }
+
+      if (!marcaData) {
+        toast.error("No se encontró la marca en la base de datos");
+        return;
+      }
+
+      // Obtener ventas reales con el código de la marca
+      const { data: ventas, error: ventasError } = await supabase
         .from('ventas_reales')
         .select('codigo_cliente, monto')
-        .eq('codigo_marca', budget.marca);
+        .eq('codigo_marca', marcaData.codigo)
+        .eq('user_id', user.id);
 
-      if (error) throw error;
+      if (ventasError) throw ventasError;
 
-      // Agrupar por cliente
-      const clientMap = new Map<string, number>();
-      ventas?.forEach(venta => {
-        const current = clientMap.get(venta.codigo_cliente) || 0;
-        clientMap.set(venta.codigo_cliente, current + venta.monto);
+      if (!ventas || ventas.length === 0) {
+        toast.info("No hay ventas registradas para esta marca");
+        setDistributions([]);
+        return;
+      }
+
+      // Obtener los nombres de los clientes
+      const codigosClientes = Array.from(new Set(ventas.map(v => v.codigo_cliente)));
+      const { data: clientes, error: clientesError } = await supabase
+        .from('clientes')
+        .select('codigo, nombre')
+        .in('codigo', codigosClientes)
+        .eq('user_id', user.id);
+
+      if (clientesError) throw clientesError;
+
+      // Crear mapa de códigos a nombres
+      const clienteMap = new Map(clientes?.map(c => [c.codigo, c.nombre]) || []);
+
+      // Agrupar ventas por cliente
+      const clientSalesMap = new Map<string, number>();
+      ventas.forEach(venta => {
+        const nombreCliente = clienteMap.get(venta.codigo_cliente);
+        if (nombreCliente) {
+          const current = clientSalesMap.get(nombreCliente) || 0;
+          clientSalesMap.set(nombreCliente, current + venta.monto);
+        }
       });
 
-      // Crear distribuciones
-      const total = Array.from(clientMap.values()).reduce((sum, val) => sum + val, 0);
-      const dists: ClientDistribution[] = Array.from(clientMap.entries()).map(([cliente, monto]) => {
+      // Crear distribuciones usando nombres de clientes
+      const total = Array.from(clientSalesMap.values()).reduce((sum, val) => sum + val, 0);
+      const dists: ClientDistribution[] = Array.from(clientSalesMap.entries()).map(([nombreCliente, monto]) => {
         const proportion = total > 0 ? monto / total : 0;
         const monto_original = budget.presupuesto * proportion;
         
-        // Verificar si hay ajustes guardados
+        // Verificar si hay ajustes guardados (también usando nombres)
         const adjustments = budget.vendor_adjustments || {};
-        const monto_asignado = adjustments[cliente] !== undefined 
-          ? adjustments[cliente] 
+        const monto_asignado = adjustments[nombreCliente] !== undefined 
+          ? adjustments[nombreCliente] 
           : monto_original;
 
         return {
-          cliente,
+          cliente: nombreCliente,
           monto_original,
           monto_asignado
         };
@@ -109,6 +160,8 @@ export const VendorBudgetView = () => {
     } catch (error: any) {
       toast.error("Error al cargar distribuciones");
       console.error(error);
+    } finally {
+      setLoading(false);
     }
   };
 
