@@ -17,6 +17,7 @@ interface ImportedData {
   marcas?: Array<{ codigo: string; nombre: string }>;
   vendedores?: Array<{ codigo: string; nombre: string }>;
   ventas?: Array<{ codigo_cliente: string; codigo_marca: string; codigo_vendedor: string; mes: string; monto: number }>;
+  presupuestos?: Array<{ marca: string; fecha_destino: string; empresa: string; presupuesto: number }>;
 }
 
 interface DiagnosticResult {
@@ -110,7 +111,7 @@ export const DataImport = () => {
     }
   }, [diagnostics]);
 
-  const downloadTemplate = (type: "clientes" | "marcas" | "vendedores" | "ventas") => {
+  const downloadTemplate = (type: "clientes" | "marcas" | "vendedores" | "ventas" | "presupuestos") => {
     let data: any[] = [];
     let filename = "";
 
@@ -147,6 +148,14 @@ export const DataImport = () => {
         ];
         filename = "plantilla_ventas.xlsx";
         break;
+      case "presupuestos":
+        data = [
+          { marca: "Nike", fecha_destino: "2025-12-31", empresa: "Empresa Alpha", presupuesto: 100000 },
+          { marca: "Adidas", fecha_destino: "2025-12-31", empresa: "Empresa Alpha", presupuesto: 500000 },
+          { marca: "Puma", fecha_destino: "2025-12-31", empresa: "Empresa Beta", presupuesto: 125000 }
+        ];
+        filename = "plantilla_presupuestos.xlsx";
+        break;
     }
 
     const ws = XLSX.utils.json_to_sheet(data);
@@ -158,7 +167,10 @@ export const DataImport = () => {
   };
 
   const validateExcel = (data: any[], type: string): { valid: boolean; missingColumns: string[]; extraColumns: string[] } => {
+    console.log('🔍 Validando Excel:', { type, dataLength: data?.length });
+    
     if (!data || data.length === 0) {
+      console.error('❌ Error: Archivo vacío', { data });
       toast.error("El archivo Excel está vacío");
       return { valid: false, missingColumns: [], extraColumns: [] };
     }
@@ -167,31 +179,46 @@ export const DataImport = () => {
       clientes: ["codigo", "nombre"],
       marcas: ["codigo", "nombre"],
       vendedores: ["codigo", "nombre"],
-      ventas: ["codigo_cliente", "codigo_marca", "codigo_vendedor", "mes", "monto"]
+      ventas: ["codigo_cliente", "codigo_marca", "codigo_vendedor", "mes", "monto"],
+      presupuestos: ["marca", "fecha_destino", "empresa", "presupuesto"]
     };
 
     const fields = requiredFields[type];
+    if (!fields) {
+      console.error('❌ Tipo de archivo no soportado:', type);
+      toast.error(`Tipo de archivo "${type}" no soportado`);
+      return { valid: false, missingColumns: [], extraColumns: [] };
+    }
+
     const firstRow = data[0];
+    console.log('📋 Primera fila del Excel:', firstRow);
+    console.log('📋 Columnas esperadas:', fields);
+    
     const actualColumns = Object.keys(firstRow);
+    console.log('📋 Columnas encontradas:', actualColumns);
     
     const missingColumns = fields.filter(field => !(field in firstRow));
     const extraColumns = actualColumns.filter(col => !fields.includes(col));
     
     if (missingColumns.length > 0) {
+      console.error('❌ Faltan columnas:', missingColumns);
       toast.error(`Faltan columnas requeridas: ${missingColumns.join(", ")}`);
+      console.log('💡 Sugerencia: Descarga la plantilla correcta y verifica los nombres de las columnas');
       return { valid: false, missingColumns, extraColumns };
     }
 
     if (extraColumns.length > 0) {
+      console.warn('⚠️ Columnas adicionales:', extraColumns);
       toast.warning(`Columnas adicionales detectadas (se ignorarán): ${extraColumns.join(", ")}`);
     }
 
+    console.log('✅ Validación exitosa');
     return { valid: true, missingColumns, extraColumns };
   };
 
   const runDiagnostics = async (
     data: any[],
-    type: "clientes" | "marcas" | "vendedores" | "ventas"
+    type: "clientes" | "marcas" | "vendedores" | "ventas" | "presupuestos"
   ): Promise<DiagnosticResult> => {
     // Validación simplificada - solo columnas
     const validation = validateExcel(data, type);
@@ -205,6 +232,10 @@ export const DataImport = () => {
       
       if (type === "ventas") {
         if (!item.codigo_cliente || !item.codigo_marca || !item.mes || item.monto === undefined) {
+          invalidRowsSample++;
+        }
+      } else if (type === "presupuestos") {
+        if (!item.marca || !item.fecha_destino || !item.empresa || item.presupuesto === undefined) {
           invalidRowsSample++;
         }
       } else {
@@ -232,12 +263,13 @@ export const DataImport = () => {
 
   const handleExcelUpload = async (
     event: React.ChangeEvent<HTMLInputElement>,
-    type: "clientes" | "marcas" | "vendedores" | "ventas"
+    type: "clientes" | "marcas" | "vendedores" | "ventas" | "presupuestos"
   ) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
     try {
+      console.log('📁 Cargando archivo:', file.name, 'Tipo:', type);
       toast.loading("Analizando archivo...");
       
       const data = await file.arrayBuffer();
@@ -245,8 +277,20 @@ export const DataImport = () => {
       const worksheet = workbook.Sheets[workbook.SheetNames[0]];
       const jsonData = XLSX.utils.sheet_to_json(worksheet);
 
+      console.log('📊 Datos parseados del Excel:', jsonData.length, 'filas');
+      console.log('📊 Muestra de datos:', jsonData.slice(0, 3));
+
+      if (jsonData.length === 0) {
+        console.error('❌ No se encontraron datos en el archivo');
+        toast.error("No se encontraron datos válidos en el archivo. Verifica que el archivo tenga datos en la primera hoja.");
+        event.target.value = "";
+        toast.dismiss();
+        return;
+      }
+
       const validation = validateExcel(jsonData, type);
       if (!validation.valid) {
+        console.error('❌ Validación fallida');
         event.target.value = "";
         toast.dismiss();
         return;
@@ -489,16 +533,17 @@ export const DataImport = () => {
           Importar Datos desde Excel
         </h2>
         <p className="text-sm text-muted-foreground mt-1">
-          Carga archivos Excel para importar clientes, marcas, vendedores y ventas reales
+          Carga archivos Excel para importar clientes, marcas, vendedores, ventas reales y presupuestos sugeridos
         </p>
       </div>
 
       <Tabs defaultValue="clientes">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="clientes">Clientes</TabsTrigger>
           <TabsTrigger value="marcas">Marcas</TabsTrigger>
           <TabsTrigger value="vendedores">Vendedores</TabsTrigger>
           <TabsTrigger value="ventas">Ventas Reales</TabsTrigger>
+          <TabsTrigger value="presupuestos">Presupuestos</TabsTrigger>
         </TabsList>
 
         <TabsContent value="clientes" className="space-y-4">
@@ -844,6 +889,84 @@ export const DataImport = () => {
                   <Upload className="h-4 w-4" />
                   {uploading ? "Importando..." : "Importar a Base de Datos"}
                 </Button>
+              </div>
+            )}
+          </div>
+        </TabsContent>
+
+        <TabsContent value="presupuestos" className="space-y-4">
+          <Alert className="mb-4">
+            <FileSpreadsheet className="h-4 w-4" />
+            <AlertTitle>Formato del Excel - Presupuestos</AlertTitle>
+            <AlertDescription className="space-y-2">
+              <p><strong>Columnas requeridas exactas:</strong> <code>marca</code>, <code>fecha_destino</code>, <code>empresa</code> y <code>presupuesto</code></p>
+              <p className="text-sm text-muted-foreground">
+                Este formato permite importar presupuestos sugeridos directamente desde Excel.
+              </p>
+              <p className="text-sm text-muted-foreground">
+                <strong>fecha_destino:</strong> Formato YYYY-MM-DD (ej: 2025-12-31)
+              </p>
+            </AlertDescription>
+          </Alert>
+          
+          <div className="space-y-4">
+            <div className="flex items-center gap-4">
+              <Button
+                variant="outline"
+                onClick={() => downloadTemplate("presupuestos")}
+                className="gap-2"
+              >
+                <Download className="h-4 w-4" />
+                Descargar Plantilla
+              </Button>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="presupuestos-file">Archivo Excel de Presupuestos</Label>
+              <p className="text-sm text-muted-foreground">
+                El Excel debe contener las columnas: <strong>marca</strong>, <strong>fecha_destino</strong>, <strong>empresa</strong> y <strong>presupuesto</strong>
+              </p>
+              <Input
+                id="presupuestos-file"
+                type="file"
+                accept=".xlsx,.xls"
+                onChange={(e) => handleExcelUpload(e, "presupuestos")}
+                className="cursor-pointer"
+              />
+            </div>
+
+            {importedData.presupuestos && importedData.presupuestos.length > 0 && (
+              <div className="space-y-3">
+                {diagnostics.presupuestos && (
+                  <Alert variant={diagnostics.presupuestos.hasErrors ? "destructive" : diagnostics.presupuestos.hasWarnings ? "default" : "default"} className="mb-4">
+                    <AlertTriangle className="h-4 w-4" />
+                    <AlertTitle>Diagnóstico del Archivo</AlertTitle>
+                    <AlertDescription className="space-y-1 text-sm">
+                      <p><strong>Total de registros:</strong> {diagnostics.presupuestos.totalRows.toLocaleString()}</p>
+                      {diagnostics.presupuestos.invalidRows > 0 && (
+                        <p className="text-yellow-600"><strong>⚠️ Filas inválidas estimadas:</strong> ~{diagnostics.presupuestos.invalidRows.toLocaleString()}</p>
+                      )}
+                      {diagnostics.presupuestos.missingColumns.length > 0 && (
+                        <p className="text-destructive"><strong>❌ Columnas faltantes:</strong> {diagnostics.presupuestos.missingColumns.join(", ")}</p>
+                      )}
+                      {diagnostics.presupuestos.extraColumns.length > 0 && (
+                        <p className="text-muted-foreground"><strong>ℹ️ Columnas extra (se ignorarán):</strong> {diagnostics.presupuestos.extraColumns.join(", ")}</p>
+                      )}
+                      {!diagnostics.presupuestos.hasErrors && !diagnostics.presupuestos.hasWarnings && (
+                        <p className="text-green-600 flex items-center gap-2"><CheckCircle className="h-4 w-4" /> Presupuestos validados correctamente</p>
+                      )}
+                    </AlertDescription>
+                  </Alert>
+                )}
+                <p className="text-sm font-medium text-foreground">
+                  {importedData.presupuestos.length.toLocaleString()} presupuestos listos
+                </p>
+                <Alert className="border-green-500 bg-green-50">
+                  <CheckCircle className="h-4 w-4 text-green-600" />
+                  <AlertDescription className="text-sm text-green-700">
+                    ✅ Los presupuestos están cargados y listos. Ve a la pestaña "Parámetros" para ver la distribución automática por marca, vendedor, cliente y artículo.
+                  </AlertDescription>
+                </Alert>
               </div>
             )}
           </div>
