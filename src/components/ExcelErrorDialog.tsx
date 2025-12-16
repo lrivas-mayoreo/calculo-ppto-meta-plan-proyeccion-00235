@@ -165,18 +165,30 @@ export const ExcelErrorDialog = ({
                           <Info className="h-4 w-4" />
                           Marcas válidas disponibles:
                         </p>
-                        <div className="flex flex-wrap gap-1">
-                          {marcasDisponibles.slice(0, 30).map((marca, idx) => (
-                            <Badge key={idx} variant="secondary" className="text-xs">
-                              {marca}
-                            </Badge>
-                          ))}
-                          {marcasDisponibles.length > 30 && (
-                            <Badge variant="outline" className="text-xs">
-                              +{marcasDisponibles.length - 30} más
-                            </Badge>
-                          )}
-                        </div>
+                        {marcasDisponibles.length === 0 ? (
+                          <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-md">
+                            <p className="text-sm text-amber-700 dark:text-amber-400 font-medium">
+                              ⚠️ No hay marcas importadas en su cuenta
+                            </p>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              Debe importar el maestro de marcas antes de cargar presupuestos. 
+                              Vaya a la pestaña "Importar Datos" y cargue un archivo con las marcas.
+                            </p>
+                          </div>
+                        ) : (
+                          <div className="flex flex-wrap gap-1">
+                            {marcasDisponibles.slice(0, 30).map((marca, idx) => (
+                              <Badge key={idx} variant="secondary" className="text-xs">
+                                {marca}
+                              </Badge>
+                            ))}
+                            {marcasDisponibles.length > 30 && (
+                              <Badge variant="outline" className="text-xs">
+                                +{marcasDisponibles.length - 30} más
+                              </Badge>
+                            )}
+                          </div>
+                        )}
                       </div>
                     )}
 
