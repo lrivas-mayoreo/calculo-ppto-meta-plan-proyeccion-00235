@@ -80,42 +80,6 @@ export type Database = {
         }
         Relationships: []
       }
-      clientes_per_role: {
-        Row: {
-          cliente_id: string
-          created_at: string | null
-          id: string
-          role_id: string
-        }
-        Insert: {
-          cliente_id: string
-          created_at?: string | null
-          id?: string
-          role_id: string
-        }
-        Update: {
-          cliente_id?: string
-          created_at?: string | null
-          id?: string
-          role_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "clientes_per_role_cliente_id_fkey"
-            columns: ["cliente_id"]
-            isOneToOne: false
-            referencedRelation: "clientes"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "clientes_per_role_role_id_fkey"
-            columns: ["role_id"]
-            isOneToOne: false
-            referencedRelation: "roles"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       import_jobs: {
         Row: {
           created_at: string | null
@@ -217,42 +181,6 @@ export type Database = {
         }
         Relationships: []
       }
-      marcas_per_role: {
-        Row: {
-          created_at: string | null
-          id: string
-          marca_id: string
-          role_id: string
-        }
-        Insert: {
-          created_at?: string | null
-          id?: string
-          marca_id: string
-          role_id: string
-        }
-        Update: {
-          created_at?: string | null
-          id?: string
-          marca_id?: string
-          role_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "marcas_per_role_marca_id_fkey"
-            columns: ["marca_id"]
-            isOneToOne: false
-            referencedRelation: "marcas"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "marcas_per_role_role_id_fkey"
-            columns: ["role_id"]
-            isOneToOne: false
-            referencedRelation: "roles"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       profiles: {
         Row: {
           created_at: string
@@ -277,52 +205,26 @@ export type Database = {
         }
         Relationships: []
       }
-      roles: {
-        Row: {
-          created_at: string | null
-          id: string
-          nombre: string
-        }
-        Insert: {
-          created_at?: string | null
-          id?: string
-          nombre: string
-        }
-        Update: {
-          created_at?: string | null
-          id?: string
-          nombre?: string
-        }
-        Relationships: []
-      }
       user_roles: {
         Row: {
-          created_at: string | null
+          created_at: string
           id: string
-          role_id: string
+          role: Database["public"]["Enums"]["app_role"]
           user_id: string
         }
         Insert: {
-          created_at?: string | null
+          created_at?: string
           id?: string
-          role_id: string
+          role: Database["public"]["Enums"]["app_role"]
           user_id: string
         }
         Update: {
-          created_at?: string | null
+          created_at?: string
           id?: string
-          role_id?: string
+          role?: Database["public"]["Enums"]["app_role"]
           user_id?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "user_roles_role_id_fkey"
-            columns: ["role_id"]
-            isOneToOne: false
-            referencedRelation: "roles"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       vendedores: {
         Row: {
@@ -350,42 +252,6 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
-      }
-      vendedores_per_role: {
-        Row: {
-          created_at: string | null
-          id: string
-          role_id: string
-          vendedor_id: string
-        }
-        Insert: {
-          created_at?: string | null
-          id?: string
-          role_id: string
-          vendedor_id: string
-        }
-        Update: {
-          created_at?: string | null
-          id?: string
-          role_id?: string
-          vendedor_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "vendedores_per_role_role_id_fkey"
-            columns: ["role_id"]
-            isOneToOne: false
-            referencedRelation: "roles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "vendedores_per_role_vendedor_id_fkey"
-            columns: ["vendedor_id"]
-            isOneToOne: false
-            referencedRelation: "vendedores"
-            referencedColumns: ["id"]
-          },
-        ]
       }
       ventas_reales: {
         Row: {
@@ -450,15 +316,13 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      has_role:
-        | {
-            Args: {
-              _role: Database["public"]["Enums"]["app_role"]
-              _user_id: string
-            }
-            Returns: boolean
-          }
-        | { Args: { _role_name: string; _user_id: string }; Returns: boolean }
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
       process_import_batch: {
         Args: { p_batch_size?: number; p_job_id: string }
         Returns: {

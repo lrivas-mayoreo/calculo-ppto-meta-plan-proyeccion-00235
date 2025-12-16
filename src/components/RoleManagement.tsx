@@ -52,22 +52,21 @@ export const RoleManagement = () => {
 
       if (profilesError) throw profilesError;
 
-      // Get all user roles with role name via join
+      // Get all user roles
       const { data: userRoles, error: rolesError } = await supabase
         .from("user_roles")
-        .select("user_id, role_id, roles(nombre)");
+        .select("user_id, role");
 
       if (rolesError) throw rolesError;
 
       // Combine data
       const usersWithRoles: UserWithRole[] = profiles.map((profile) => {
-        const userRole = userRoles?.find((ur) => ur.user_id === profile.id);
-        const roleName = userRole?.roles?.nombre as AppRole | null;
+        const userRole = userRoles.find((ur) => ur.user_id === profile.id);
         return {
           id: profile.id,
           email: profile.email || "",
           full_name: profile.full_name,
-          role: roleName || null,
+          role: userRole?.role || null,
         };
       });
 
@@ -84,17 +83,6 @@ export const RoleManagement = () => {
     try {
       setUpdating(userId);
 
-      // First get the role_id from roles table
-      const { data: roleData, error: roleError } = await supabase
-        .from("roles")
-        .select("id")
-        .eq("nombre", newRole)
-        .single();
-
-      if (roleError || !roleData) {
-        throw new Error("Rol no encontrado");
-      }
-
       // Check if user already has a role
       const { data: existingRole } = await supabase
         .from("user_roles")
@@ -106,7 +94,7 @@ export const RoleManagement = () => {
         // Update existing role
         const { error } = await supabase
           .from("user_roles")
-          .update({ role_id: roleData.id })
+          .update({ role: newRole })
           .eq("user_id", userId);
 
         if (error) throw error;
@@ -114,7 +102,7 @@ export const RoleManagement = () => {
         // Insert new role
         const { error } = await supabase
           .from("user_roles")
-          .insert({ user_id: userId, role_id: roleData.id });
+          .insert({ user_id: userId, role: newRole });
 
         if (error) throw error;
       }

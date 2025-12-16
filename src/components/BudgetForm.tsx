@@ -1,8 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Calculator, Upload, X, Download, Eye, Info, Settings, Check, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
@@ -18,7 +17,6 @@ interface BudgetFormProps {
   onCalculate: (marcasPresupuesto: MarcaPresupuesto[], mesesReferencia: string[]) => void;
   mockData: {
     marcas: string[];
-    marcasConCodigo?: Array<{ codigo: string; nombre: string }>;
     empresas: string[];
     articulos: Record<string, string[]>;
   };
@@ -50,8 +48,6 @@ export const BudgetForm = ({
   brandAdjustments = {},
   presupuestoTotal = 0,
 }: BudgetFormProps) => {
-  const [mesInicio, setMesInicio] = useState<string>("");
-  const [mesFin, setMesFin] = useState<string>("");
   const [mesesReferencia, setMesesReferencia] = useState<string[]>([]);
   const [marcasPresupuesto, setMarcasPresupuesto] = useState<MarcaPresupuesto[]>([]);
   const [marcasConError, setMarcasConError] = useState<
@@ -71,49 +67,6 @@ export const BudgetForm = ({
   const [showErrorDialog, setShowErrorDialog] = useState(false);
   const [dateFormatPreview, setDateFormatPreview] = useState<string>("");
 
-  // Calculate meses referencia from start/end selection
-  useEffect(() => {
-    if (!mesInicio && !mesFin) {
-      setMesesReferencia([]);
-      return;
-    }
-    
-    // If only one is set, use same value for both
-    const inicio = mesInicio || mesFin;
-    const fin = mesFin || mesInicio;
-    
-    const startIdx = mesesDisponibles.indexOf(inicio);
-    const endIdx = mesesDisponibles.indexOf(fin);
-    
-    if (startIdx === -1 || endIdx === -1) {
-      setMesesReferencia([]);
-      return;
-    }
-    
-    // mesesDisponibles is ordered from newest to oldest, so we need to handle range correctly
-    const minIdx = Math.min(startIdx, endIdx);
-    const maxIdx = Math.max(startIdx, endIdx);
-    
-    const selectedMeses = mesesDisponibles.slice(minIdx, maxIdx + 1);
-    setMesesReferencia(selectedMeses);
-  }, [mesInicio, mesFin, mesesDisponibles]);
-
-  const handleMesInicioChange = (value: string) => {
-    setMesInicio(value);
-    // Auto-complete mesFin if empty
-    if (!mesFin) {
-      setMesFin(value);
-    }
-  };
-
-  const handleMesFinChange = (value: string) => {
-    setMesFin(value);
-    // Auto-complete mesInicio if empty
-    if (!mesInicio) {
-      setMesInicio(value);
-    }
-  };
-
   const handleMesToggle = (mesAnio: string) => {
     setMesesReferencia((prev) => (prev.includes(mesAnio) ? prev.filter((m) => m !== mesAnio) : [...prev, mesAnio]));
   };
@@ -121,14 +74,6 @@ export const BudgetForm = ({
   const handleExcelUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
-    console.log("📁 Excel upload - Marcas disponibles:", mockData.marcas.length, mockData.marcas.slice(0, 5));
-    
-    if (mockData.marcas.length === 0) {
-      toast.error("Espere a que se carguen las marcas de la base de datos antes de cargar el Excel");
-      e.target.value = "";
-      return;
-    }
 
     setExcelFileName(file.name);
     toast.info("Procesando archivo Excel...");
@@ -253,23 +198,11 @@ export const BudgetForm = ({
             return;
           }
 
-          // Validar que la marca exista en el maestro (check both codigo and nombre, case-insensitive)
-          let marcaEncontrada = mockData.marcas.find(
+          // Validar que la marca exista en el maestro (case-insensitive)
+          const marcaEncontrada = mockData.marcas.find(
             m => m.toLowerCase().trim() === marca.toLowerCase().trim()
           );
-          
-          // Also check by codigo if marcasConCodigo is available
-          if (!marcaEncontrada && mockData.marcasConCodigo) {
-            const marcaPorCodigo = mockData.marcasConCodigo.find(
-              m => m.codigo.toLowerCase().trim() === marca.toLowerCase().trim()
-            );
-            if (marcaPorCodigo) {
-              marcaEncontrada = marcaPorCodigo.nombre;
-            }
-          }
-          
           if (!marcaEncontrada) {
-            console.log("❌ Marca no encontrada:", marca, "Disponibles:", mockData.marcas.slice(0, 5));
             errores.push({
               marca,
               fechaDestino,
@@ -277,7 +210,7 @@ export const BudgetForm = ({
               presupuesto,
               error: `Marca "${marca}" no existe en el maestro`,
               tipoError: 'marca_invalida',
-              sugerencia: `Verifique que la marca esté registrada. Ejemplo: ${mockData.marcas[0] || 'N/A'}`
+              sugerencia: 'Verifique que la marca esté registrada en el sistema'
             });
             return;
           }
@@ -575,62 +508,42 @@ export const BudgetForm = ({
         </div>
       )}
 
-      {/* === Meses de Referencia (2 selects: inicio y fin) === */}
+      {/* === Meses de Referencia (tiles) === */}
       <div className="space-y-3">
-        <Label>Meses de Referencia *</Label>
-        
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <Label className="text-sm text-muted-foreground">Mes Inicio</Label>
-            <Select value={mesInicio} onValueChange={handleMesInicioChange}>
-              <SelectTrigger>
-                <SelectValue placeholder="Seleccione mes inicio" />
-              </SelectTrigger>
-              <SelectContent>
-                {mesesDisponibles.map((mesAnio) => (
-                  <SelectItem key={mesAnio} value={mesAnio}>
-                    {mesAnio}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          
-          <div className="space-y-2">
-            <Label className="text-sm text-muted-foreground">Mes Fin</Label>
-            <Select value={mesFin} onValueChange={handleMesFinChange}>
-              <SelectTrigger>
-                <SelectValue placeholder="Seleccione mes fin" />
-              </SelectTrigger>
-              <SelectContent>
-                {mesesDisponibles.map((mesAnio) => (
-                  <SelectItem key={mesAnio} value={mesAnio}>
-                    {mesAnio}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+        <div className="flex items-center justify-between">
+          <Label>Meses de Referencia (Mes-Año) *</Label>
+          {mesesReferencia.length > 0 && (
+            <Button type="button" variant="ghost" size="sm" onClick={() => setMesesReferencia([])}>
+              Limpiar
+            </Button>
+          )}
+        </div>
+
+        <div className="max-h-64 overflow-y-auto rounded-md border border-border bg-muted/30 p-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+            {mesesDisponibles.map((mesAnio) => {
+              const selected = mesesReferencia.includes(mesAnio);
+              return (
+                <button
+                  key={mesAnio}
+                  type="button"
+                  onClick={() => handleMesToggle(mesAnio)}
+                  aria-pressed={selected}
+                  className={[
+                    "relative w-full rounded-xl border px-3 py-2 text-sm font-medium text-left transition",
+                    "focus:outline-none focus:ring-2 focus:ring-offset-2",
+                    selected ? "border-blue-600 bg-blue-50 ring-blue-600" : "border-gray-300 hover:border-gray-400",
+                  ].join(" ")}
+                >
+                  <span className="block truncate pr-6">{mesAnio}</span>
+                  {selected && <Check className="absolute top-2 right-2 h-4 w-4" />}
+                </button>
+              );
+            })}
           </div>
         </div>
 
-        {mesesReferencia.length > 0 && (
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-muted-foreground">
-              Rango seleccionado: {mesesReferencia.length} mes(es)
-            </span>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                setMesInicio("");
-                setMesFin("");
-              }}
-            >
-              Limpiar
-            </Button>
-          </div>
-        )}
+        <p className="text-xs text-muted-foreground">Seleccionados: {mesesReferencia.length} mes(es)</p>
       </div>
 
       <Button type="submit" className="w-full">

@@ -80,37 +80,17 @@ export const VendorClientTable = ({ result, vendorAdjustments, presupuestoTotal,
     
     console.log("=== DEBUG VENTAS MES ANTERIOR ===");
     
-    // Get user's role to filter data
-    const { data: userRole } = await supabase
-      .from("user_roles")
-      .select("role_id")
-      .eq("user_id", user.id)
-      .maybeSingle();
-
-    const userRoleId = userRole?.role_id;
-
-    // Get allowed IDs based on role
-    const [allowedMarcasRes, allowedClientesRes] = await Promise.all([
-      supabase.from("marcas_per_role").select("marca_id").eq("role_id", userRoleId),
-      supabase.from("clientes_per_role").select("cliente_id").eq("role_id", userRoleId),
+    // Load all codes mappings - need both directions
+    const [clientsRes, brandsRes] = await Promise.all([
+      supabase.from('clientes').select('nombre, codigo').eq('user_id', user.id),
+      supabase.from('marcas').select('nombre, codigo').eq('user_id', user.id),
     ]);
-
-    const allowedMarcaIds = allowedMarcasRes.data?.map(m => m.marca_id) || [];
-    const allowedClienteIds = allowedClientesRes.data?.map(c => c.cliente_id) || [];
-
-    // Load codes mappings filtered by role permissions
-    const clientsRes = allowedClienteIds.length > 0 
-      ? await supabase.from('clientes').select('nombre, codigo').in('id', allowedClienteIds)
-      : { data: [] as { nombre: string; codigo: string }[] };
-    const brandsRes = allowedMarcaIds.length > 0 
-      ? await supabase.from('marcas').select('nombre, codigo').in('id', allowedMarcaIds)
-      : { data: [] as { nombre: string; codigo: string }[] };
     
     console.log("Clientes cargados:", clientsRes.data?.length || 0);
     console.log("Marcas cargadas:", brandsRes.data?.length || 0);
     
-    const clientCodes = new Map<string, string>(clientsRes.data?.map(c => [c.nombre, c.codigo] as [string, string]) || []);
-    const brandCodes = new Map<string, string>(brandsRes.data?.map(b => [b.nombre, b.codigo] as [string, string]) || []);
+    const clientCodes = new Map(clientsRes.data?.map(c => [c.nombre, c.codigo]) || []);
+    const brandCodes = new Map(brandsRes.data?.map(b => [b.nombre, b.codigo]) || []);
     
     for (const marca of result.resultadosMarcas) {
       const previousMonth = getPreviousMonth(marca.fechaDestino);
@@ -144,7 +124,8 @@ export const VendorClientTable = ({ result, vendorAdjustments, presupuestoTotal,
           .select('monto')
           .eq('mes', previousMonth)
           .eq('codigo_marca', codigoMarca)
-          .eq('codigo_cliente', codigoCliente);
+          .eq('codigo_cliente', codigoCliente)
+          .eq('user_id', user.id);
         
         if (error) {
           console.error("Error consultando ventas_reales:", error);
