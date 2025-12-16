@@ -116,19 +116,37 @@ const Contabilidad = () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Usuario no autenticado");
 
-      // Get all marcas to validate
-      const { data: marcasData } = await supabase
-        .from("marcas")
-        .select("codigo, nombre");
+      // Get user's role to filter data
+      const { data: userRole } = await supabase
+        .from("user_roles")
+        .select("role_id")
+        .eq("user_id", user.id)
+        .maybeSingle();
 
-      const marcasMap = new Map(marcasData?.map(m => [m.nombre.toLowerCase(), m.codigo]) || []);
+      const userRoleId = userRole?.role_id;
 
-      // Get all clients
-      const { data: clientesData } = await supabase
-        .from("clientes")
-        .select("codigo, nombre");
+      // Get allowed IDs based on role
+      const [allowedMarcasRes, allowedClientesRes] = await Promise.all([
+        supabase.from("marcas_per_role").select("marca_id").eq("role_id", userRoleId),
+        supabase.from("clientes_per_role").select("cliente_id").eq("role_id", userRoleId),
+      ]);
 
-      const clientesMap = new Map(clientesData?.map(c => [c.codigo, c.nombre]) || []);
+      const allowedMarcaIds = allowedMarcasRes.data?.map(m => m.marca_id) || [];
+      const allowedClienteIds = allowedClientesRes.data?.map(c => c.cliente_id) || [];
+
+      // Get marcas filtered by role permissions
+      const marcasRes = allowedMarcaIds.length > 0 
+        ? await supabase.from("marcas").select("codigo, nombre").in("id", allowedMarcaIds)
+        : { data: [] as { codigo: string; nombre: string }[] };
+
+      const marcasMap = new Map<string, string>(marcasRes.data?.map(m => [m.nombre.toLowerCase(), m.codigo] as [string, string]) || []);
+
+      // Get clients filtered by role permissions
+      const clientesRes = allowedClienteIds.length > 0 
+        ? await supabase.from("clientes").select("codigo, nombre").in("id", allowedClienteIds)
+        : { data: [] as { codigo: string; nombre: string }[] };
+
+      const clientesMap = new Map<string, string>(clientesRes.data?.map(c => [c.codigo, c.nombre] as [string, string]) || []);
 
       let successCount = 0;
       let errorCount = 0;

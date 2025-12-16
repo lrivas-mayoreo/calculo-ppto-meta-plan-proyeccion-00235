@@ -191,12 +191,32 @@ const Index = () => {
           }
         }
         
-        // Load real data from Supabase
+        // Load real data from Supabase filtered by role permissions
+        const userRoleId = roleData?.role_id;
+        
+        // Get allowed IDs based on role
+        const [allowedMarcasRes, allowedClientesRes, allowedVendedoresRes] = await Promise.all([
+          supabase.from("marcas_per_role").select("marca_id").eq("role_id", userRoleId),
+          supabase.from("clientes_per_role").select("cliente_id").eq("role_id", userRoleId),
+          supabase.from("vendedores_per_role").select("vendedor_id").eq("role_id", userRoleId),
+        ]);
+        
+        const allowedMarcaIds = allowedMarcasRes.data?.map(m => m.marca_id) || [];
+        const allowedClienteIds = allowedClientesRes.data?.map(c => c.cliente_id) || [];
+        const allowedVendedorIds = allowedVendedoresRes.data?.map(v => v.vendedor_id) || [];
+        
+        // Load data filtered by role permissions
         const [clientesRes, marcasRes, vendedoresRes, ventasRes] = await Promise.all([
-          supabase.from("clientes").select("codigo, nombre"),
-          supabase.from("marcas").select("codigo, nombre"),
-          supabase.from("vendedores").select("codigo, nombre"),
-          supabase.from("ventas_reales").select("mes, codigo_marca, codigo_cliente, codigo_vendedor, monto")
+          allowedClienteIds.length > 0 
+            ? supabase.from("clientes").select("codigo, nombre").in("id", allowedClienteIds)
+            : Promise.resolve({ data: [] }),
+          allowedMarcaIds.length > 0 
+            ? supabase.from("marcas").select("codigo, nombre").in("id", allowedMarcaIds)
+            : Promise.resolve({ data: [] }),
+          allowedVendedorIds.length > 0 
+            ? supabase.from("vendedores").select("codigo, nombre").in("id", allowedVendedorIds)
+            : Promise.resolve({ data: [] }),
+          supabase.from("ventas_reales").select("mes, codigo_marca, codigo_cliente, codigo_vendedor, monto") // ventas_reales visible to all
         ]);
         
         if (clientesRes.data) setClientes(clientesRes.data);
@@ -247,12 +267,32 @@ const Index = () => {
           }
         }
         
-        // Load real data from Supabase
+        // Load real data from Supabase filtered by role permissions
+        const userRoleId = roleData?.role_id;
+        
+        // Get allowed IDs based on role
+        const [allowedMarcasRes, allowedClientesRes, allowedVendedoresRes] = await Promise.all([
+          supabase.from("marcas_per_role").select("marca_id").eq("role_id", userRoleId),
+          supabase.from("clientes_per_role").select("cliente_id").eq("role_id", userRoleId),
+          supabase.from("vendedores_per_role").select("vendedor_id").eq("role_id", userRoleId),
+        ]);
+        
+        const allowedMarcaIds = allowedMarcasRes.data?.map(m => m.marca_id) || [];
+        const allowedClienteIds = allowedClientesRes.data?.map(c => c.cliente_id) || [];
+        const allowedVendedorIds = allowedVendedoresRes.data?.map(v => v.vendedor_id) || [];
+        
+        // Load data filtered by role permissions
         const [clientesRes, marcasRes, vendedoresRes, ventasRes] = await Promise.all([
-          supabase.from("clientes").select("codigo, nombre"),
-          supabase.from("marcas").select("codigo, nombre"),
-          supabase.from("vendedores").select("codigo, nombre"),
-          supabase.from("ventas_reales").select("mes, codigo_marca, codigo_cliente, codigo_vendedor, monto")
+          allowedClienteIds.length > 0 
+            ? supabase.from("clientes").select("codigo, nombre").in("id", allowedClienteIds)
+            : Promise.resolve({ data: [] }),
+          allowedMarcaIds.length > 0 
+            ? supabase.from("marcas").select("codigo, nombre").in("id", allowedMarcaIds)
+            : Promise.resolve({ data: [] }),
+          allowedVendedorIds.length > 0 
+            ? supabase.from("vendedores").select("codigo, nombre").in("id", allowedVendedorIds)
+            : Promise.resolve({ data: [] }),
+          supabase.from("ventas_reales").select("mes, codigo_marca, codigo_cliente, codigo_vendedor, monto") // ventas_reales visible to all
         ]);
         
         if (clientesRes.data) setClientes(clientesRes.data);
