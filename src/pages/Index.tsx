@@ -194,34 +194,54 @@ const Index = () => {
         // Load real data from Supabase filtered by role permissions
         const userRoleId = roleData?.role_id;
         
-        // Get allowed IDs based on role
-        const [allowedMarcasRes, allowedClientesRes, allowedVendedoresRes] = await Promise.all([
-          supabase.from("marcas_per_role").select("marca_id").eq("role_id", userRoleId),
-          supabase.from("clientes_per_role").select("cliente_id").eq("role_id", userRoleId),
-          supabase.from("vendedores_per_role").select("vendedor_id").eq("role_id", userRoleId),
+        // Get allowed IDs based on role (handle pagination for large datasets)
+        const fetchAllFromPerRole = async (table: "marcas_per_role" | "clientes_per_role" | "vendedores_per_role", idColumn: string, roleId: string) => {
+          const allIds: string[] = [];
+          let page = 0;
+          const pageSize = 1000;
+          while (true) {
+            const { data } = await supabase
+              .from(table)
+              .select(idColumn)
+              .eq("role_id", roleId)
+              .range(page * pageSize, (page + 1) * pageSize - 1);
+            if (!data || data.length === 0) break;
+            allIds.push(...data.map((d: any) => d[idColumn]));
+            if (data.length < pageSize) break;
+            page++;
+          }
+          return allIds;
+        };
+
+        const [allowedMarcaIds, allowedClienteIds, allowedVendedorIds] = await Promise.all([
+          fetchAllFromPerRole("marcas_per_role", "marca_id", userRoleId),
+          fetchAllFromPerRole("clientes_per_role", "cliente_id", userRoleId),
+          fetchAllFromPerRole("vendedores_per_role", "vendedor_id", userRoleId),
         ]);
         
-        const allowedMarcaIds = allowedMarcasRes.data?.map(m => m.marca_id) || [];
-        const allowedClienteIds = allowedClientesRes.data?.map(c => c.cliente_id) || [];
-        const allowedVendedorIds = allowedVendedoresRes.data?.map(v => v.vendedor_id) || [];
-        
-        // Load data filtered by role permissions
-        const [clientesRes, marcasRes, vendedoresRes, ventasRes] = await Promise.all([
-          allowedClienteIds.length > 0 
-            ? supabase.from("clientes").select("codigo, nombre").in("id", allowedClienteIds)
-            : Promise.resolve({ data: [] }),
-          allowedMarcaIds.length > 0 
-            ? supabase.from("marcas").select("codigo, nombre").in("id", allowedMarcaIds)
-            : Promise.resolve({ data: [] }),
-          allowedVendedorIds.length > 0 
-            ? supabase.from("vendedores").select("codigo, nombre").in("id", allowedVendedorIds)
-            : Promise.resolve({ data: [] }),
-          supabase.from("ventas_reales").select("mes, codigo_marca, codigo_cliente, codigo_vendedor, monto") // ventas_reales visible to all
+        // Load data filtered by role permissions (batch for large ID sets)
+        const fetchByIds = async (table: "clientes" | "marcas" | "vendedores", ids: string[]) => {
+          if (ids.length === 0) return [];
+          const allData: { codigo: string; nombre: string }[] = [];
+          const batchSize = 500;
+          for (let i = 0; i < ids.length; i += batchSize) {
+            const batch = ids.slice(i, i + batchSize);
+            const { data } = await supabase.from(table).select("codigo, nombre").in("id", batch);
+            if (data) allData.push(...data);
+          }
+          return allData;
+        };
+
+        const [clientesData, marcasData, vendedoresData, ventasRes] = await Promise.all([
+          fetchByIds("clientes", allowedClienteIds),
+          fetchByIds("marcas", allowedMarcaIds),
+          fetchByIds("vendedores", allowedVendedorIds),
+          supabase.from("ventas_reales").select("mes, codigo_marca, codigo_cliente, codigo_vendedor, monto").limit(50000)
         ]);
         
-        if (clientesRes.data) setClientes(clientesRes.data);
-        if (marcasRes.data) setMarcas(marcasRes.data);
-        if (vendedoresRes.data) setVendedores(vendedoresRes.data);
+        setClientes(clientesData);
+        setMarcas(marcasData);
+        setVendedores(vendedoresData);
         if (ventasRes.data) setVentas(ventasRes.data);
       }
     });
@@ -268,37 +288,57 @@ const Index = () => {
         }
         
         // Load real data from Supabase filtered by role permissions
-        const userRoleId = roleData?.role_id;
+        const userRoleId2 = roleData?.role_id;
         
-        // Get allowed IDs based on role
-        const [allowedMarcasRes, allowedClientesRes, allowedVendedoresRes] = await Promise.all([
-          supabase.from("marcas_per_role").select("marca_id").eq("role_id", userRoleId),
-          supabase.from("clientes_per_role").select("cliente_id").eq("role_id", userRoleId),
-          supabase.from("vendedores_per_role").select("vendedor_id").eq("role_id", userRoleId),
+        // Get allowed IDs based on role (handle pagination for large datasets)
+        const fetchAllFromPerRole2 = async (table: "marcas_per_role" | "clientes_per_role" | "vendedores_per_role", idColumn: string, roleId: string) => {
+          const allIds: string[] = [];
+          let page = 0;
+          const pageSize = 1000;
+          while (true) {
+            const { data } = await supabase
+              .from(table)
+              .select(idColumn)
+              .eq("role_id", roleId)
+              .range(page * pageSize, (page + 1) * pageSize - 1);
+            if (!data || data.length === 0) break;
+            allIds.push(...data.map((d: any) => d[idColumn]));
+            if (data.length < pageSize) break;
+            page++;
+          }
+          return allIds;
+        };
+
+        const [allowedMarcaIds2, allowedClienteIds2, allowedVendedorIds2] = await Promise.all([
+          fetchAllFromPerRole2("marcas_per_role", "marca_id", userRoleId2),
+          fetchAllFromPerRole2("clientes_per_role", "cliente_id", userRoleId2),
+          fetchAllFromPerRole2("vendedores_per_role", "vendedor_id", userRoleId2),
         ]);
         
-        const allowedMarcaIds = allowedMarcasRes.data?.map(m => m.marca_id) || [];
-        const allowedClienteIds = allowedClientesRes.data?.map(c => c.cliente_id) || [];
-        const allowedVendedorIds = allowedVendedoresRes.data?.map(v => v.vendedor_id) || [];
-        
-        // Load data filtered by role permissions
-        const [clientesRes, marcasRes, vendedoresRes, ventasRes] = await Promise.all([
-          allowedClienteIds.length > 0 
-            ? supabase.from("clientes").select("codigo, nombre").in("id", allowedClienteIds)
-            : Promise.resolve({ data: [] }),
-          allowedMarcaIds.length > 0 
-            ? supabase.from("marcas").select("codigo, nombre").in("id", allowedMarcaIds)
-            : Promise.resolve({ data: [] }),
-          allowedVendedorIds.length > 0 
-            ? supabase.from("vendedores").select("codigo, nombre").in("id", allowedVendedorIds)
-            : Promise.resolve({ data: [] }),
-          supabase.from("ventas_reales").select("mes, codigo_marca, codigo_cliente, codigo_vendedor, monto") // ventas_reales visible to all
+        // Load data filtered by role permissions (batch for large ID sets)
+        const fetchByIds2 = async (table: "clientes" | "marcas" | "vendedores", ids: string[]) => {
+          if (ids.length === 0) return [];
+          const allData: { codigo: string; nombre: string }[] = [];
+          const batchSize = 500;
+          for (let i = 0; i < ids.length; i += batchSize) {
+            const batch = ids.slice(i, i + batchSize);
+            const { data } = await supabase.from(table).select("codigo, nombre").in("id", batch);
+            if (data) allData.push(...data);
+          }
+          return allData;
+        };
+
+        const [clientesData2, marcasData2, vendedoresData2, ventasRes2] = await Promise.all([
+          fetchByIds2("clientes", allowedClienteIds2),
+          fetchByIds2("marcas", allowedMarcaIds2),
+          fetchByIds2("vendedores", allowedVendedorIds2),
+          supabase.from("ventas_reales").select("mes, codigo_marca, codigo_cliente, codigo_vendedor, monto").limit(50000)
         ]);
         
-        if (clientesRes.data) setClientes(clientesRes.data);
-        if (marcasRes.data) setMarcas(marcasRes.data);
-        if (vendedoresRes.data) setVendedores(vendedoresRes.data);
-        if (ventasRes.data) setVentas(ventasRes.data);
+        setClientes(clientesData2);
+        setMarcas(marcasData2);
+        setVendedores(vendedoresData2);
+        if (ventasRes2.data) setVentas(ventasRes2.data);
       }
     });
     return () => subscription.unsubscribe();
