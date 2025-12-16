@@ -80,25 +80,47 @@ export const VendorBudgetView = () => {
         return;
       }
 
-      // Primero, obtener el código de la marca desde la tabla marcas
-      const { data: marcaData, error: marcaError } = await supabase
+      // Get user's role to filter data
+      const { data: userRole } = await supabase
+        .from("user_roles")
+        .select("role_id")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      const userRoleId = userRole?.role_id;
+
+      // Get allowed marca IDs based on role
+      const { data: allowedMarcasRes } = await supabase
+        .from("marcas_per_role")
+        .select("marca_id")
+        .eq("role_id", userRoleId);
+
+      const allowedMarcaIds = allowedMarcasRes?.map(m => m.marca_id) || [];
+
+      // Primero, obtener el código de la marca desde la tabla marcas (filtered by role)
+      let marcaQuery = supabase
         .from('marcas')
         .select('codigo')
-        .eq('nombre', budget.marca)
-        .single();
+        .eq('nombre', budget.marca);
+      
+      if (allowedMarcaIds.length > 0) {
+        marcaQuery = marcaQuery.in('id', allowedMarcaIds);
+      }
+      
+      const { data: marcaData, error: marcaError } = await marcaQuery.single();
 
       if (marcaError) {
         console.error("Error al buscar código de marca:", marcaError);
-        toast.error("No se encontró el código de la marca");
+        toast.error("No se encontró el código de la marca o no tiene permisos");
         return;
       }
 
       if (!marcaData) {
-        toast.error("No se encontró la marca en la base de datos");
+        toast.error("No se encontró la marca en la base de datos o no tiene permisos");
         return;
       }
 
-      // Obtener ventas reales con el código de la marca
+      // Obtener ventas reales con el código de la marca (ventas_reales visible to all)
       const { data: ventas, error: ventasError } = await supabase
         .from('ventas_reales')
         .select('codigo_cliente, monto')
@@ -112,12 +134,26 @@ export const VendorBudgetView = () => {
         return;
       }
 
-      // Obtener los nombres de los clientes
+      // Get allowed cliente IDs based on role
+      const { data: allowedClientesRes } = await supabase
+        .from("clientes_per_role")
+        .select("cliente_id")
+        .eq("role_id", userRoleId);
+
+      const allowedClienteIds = allowedClientesRes?.map(c => c.cliente_id) || [];
+
+      // Obtener los nombres de los clientes (filtered by role)
       const codigosClientes = Array.from(new Set(ventas.map(v => v.codigo_cliente)));
-      const { data: clientes, error: clientesError } = await supabase
+      let clientesQuery = supabase
         .from('clientes')
-        .select('codigo, nombre')
+        .select('id, codigo, nombre')
         .in('codigo', codigosClientes);
+      
+      if (allowedClienteIds.length > 0) {
+        clientesQuery = clientesQuery.in('id', allowedClienteIds);
+      }
+      
+      const { data: clientes, error: clientesError } = await clientesQuery;
 
       if (clientesError) throw clientesError;
 
