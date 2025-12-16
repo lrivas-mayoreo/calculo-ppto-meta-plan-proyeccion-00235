@@ -85,7 +85,6 @@ export const VendorBudgetView = () => {
         .from('marcas')
         .select('codigo')
         .eq('nombre', budget.marca)
-        .eq('user_id', user.id)
         .single();
 
       if (marcaError) {
@@ -103,8 +102,7 @@ export const VendorBudgetView = () => {
       const { data: ventas, error: ventasError } = await supabase
         .from('ventas_reales')
         .select('codigo_cliente, monto')
-        .eq('codigo_marca', marcaData.codigo)
-        .eq('user_id', user.id);
+        .eq('codigo_marca', marcaData.codigo);
 
       if (ventasError) throw ventasError;
 
@@ -119,8 +117,7 @@ export const VendorBudgetView = () => {
       const { data: clientes, error: clientesError } = await supabase
         .from('clientes')
         .select('codigo, nombre')
-        .in('codigo', codigosClientes)
-        .eq('user_id', user.id);
+        .in('codigo', codigosClientes);
 
       if (clientesError) throw clientesError;
 

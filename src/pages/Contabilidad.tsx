@@ -33,13 +33,16 @@ const Contabilidad = () => {
       return;
     }
 
-    const { data: roles } = await supabase
+    const { data: userRole } = await supabase
       .from("user_roles")
-      .select("role")
+      .select("role_id, roles(nombre)")
       .eq("user_id", user.id)
-      .in("role", ["contabilidad", "administrador"]);
+      .maybeSingle();
+    
+    const roleName = (userRole?.roles as any)?.nombre;
+    const hasAccess = roleName === "contabilidad" || roleName === "administrador";
 
-    if (!roles || roles.length === 0) {
+    if (!hasAccess) {
       toast.error("No tiene permisos de contabilidad");
       navigate("/");
     }
@@ -116,16 +119,14 @@ const Contabilidad = () => {
       // Get all marcas to validate
       const { data: marcasData } = await supabase
         .from("marcas")
-        .select("codigo, nombre")
-        .eq("user_id", user.id);
+        .select("codigo, nombre");
 
       const marcasMap = new Map(marcasData?.map(m => [m.nombre.toLowerCase(), m.codigo]) || []);
 
       // Get all clients
       const { data: clientesData } = await supabase
         .from("clientes")
-        .select("codigo, nombre")
-        .eq("user_id", user.id);
+        .select("codigo, nombre");
 
       const clientesMap = new Map(clientesData?.map(c => [c.codigo, c.nombre]) || []);
 
@@ -146,7 +147,6 @@ const Contabilidad = () => {
           const { data: ventasData } = await supabase
             .from("ventas_reales")
             .select("codigo_cliente, monto")
-            .eq("user_id", user.id)
             .eq("codigo_marca", marcaCodigo);
 
           if (!ventasData || ventasData.length === 0) {

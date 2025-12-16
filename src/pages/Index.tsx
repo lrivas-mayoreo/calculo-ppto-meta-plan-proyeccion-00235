@@ -162,8 +162,8 @@ const Index = () => {
         // Load user role
         const {
           data: roleData
-        } = await supabase.from("user_roles").select("role").eq("user_id", session.user.id).maybeSingle();
-        const role = roleData?.role || null;
+        } = await supabase.from("user_roles").select("role_id, roles(nombre)").eq("user_id", session.user.id).maybeSingle();
+        const role = (roleData?.roles as any)?.nombre || null;
         setUserRole(role);
         setSimulatedRole(role);
 
@@ -193,10 +193,10 @@ const Index = () => {
         
         // Load real data from Supabase
         const [clientesRes, marcasRes, vendedoresRes, ventasRes] = await Promise.all([
-          supabase.from("clientes").select("codigo, nombre").eq("user_id", session.user.id),
-          supabase.from("marcas").select("codigo, nombre").eq("user_id", session.user.id),
-          supabase.from("vendedores").select("codigo, nombre").eq("user_id", session.user.id),
-          supabase.from("ventas_reales").select("mes, codigo_marca, codigo_cliente, codigo_vendedor, monto").eq("user_id", session.user.id)
+          supabase.from("clientes").select("codigo, nombre"),
+          supabase.from("marcas").select("codigo, nombre"),
+          supabase.from("vendedores").select("codigo, nombre"),
+          supabase.from("ventas_reales").select("mes, codigo_marca, codigo_cliente, codigo_vendedor, monto")
         ]);
         
         if (clientesRes.data) setClientes(clientesRes.data);
@@ -218,8 +218,8 @@ const Index = () => {
         // Load user role
         const {
           data: roleData
-        } = await supabase.from("user_roles").select("role").eq("user_id", session.user.id).maybeSingle();
-        const role = roleData?.role || null;
+        } = await supabase.from("user_roles").select("role_id, roles(nombre)").eq("user_id", session.user.id).maybeSingle();
+        const role = (roleData?.roles as any)?.nombre || null;
         setUserRole(role);
         setSimulatedRole(role);
 
@@ -249,10 +249,10 @@ const Index = () => {
         
         // Load real data from Supabase
         const [clientesRes, marcasRes, vendedoresRes, ventasRes] = await Promise.all([
-          supabase.from("clientes").select("codigo, nombre").eq("user_id", session.user.id),
-          supabase.from("marcas").select("codigo, nombre").eq("user_id", session.user.id),
-          supabase.from("vendedores").select("codigo, nombre").eq("user_id", session.user.id),
-          supabase.from("ventas_reales").select("mes, codigo_marca, codigo_cliente, codigo_vendedor, monto").eq("user_id", session.user.id)
+          supabase.from("clientes").select("codigo, nombre"),
+          supabase.from("marcas").select("codigo, nombre"),
+          supabase.from("vendedores").select("codigo, nombre"),
+          supabase.from("ventas_reales").select("mes, codigo_marca, codigo_cliente, codigo_vendedor, monto")
         ]);
         
         if (clientesRes.data) setClientes(clientesRes.data);
