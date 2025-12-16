@@ -1,9 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Calculator, Upload, X, Download, Eye, Info, Settings, Check, AlertTriangle } from "lucide-react";
+// import { Checkbox } from "@/components/ui/checkbox"; // ya no se usa
+import { Calculator, Upload, X, Download, Eye, Info, Settings, Check } from "lucide-react";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
 import type { MarcaPresupuesto } from "@/pages/Index";
@@ -12,13 +12,11 @@ import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible";
 import { Badge } from "@/components/ui/badge";
 import { parseDateFromExcel, formatDateToYYYYMMDD, detectDateFormat } from "@/lib/dateUtils";
 import { SuggestedBudget } from "@/components/SuggestedBudget";
-import { ExcelErrorDialog } from "@/components/ExcelErrorDialog";
 
 interface BudgetFormProps {
   onCalculate: (marcasPresupuesto: MarcaPresupuesto[], mesesReferencia: string[]) => void;
   mockData: {
     marcas: string[];
-    marcasConCodigo?: Array<{ codigo: string; nombre: string }>;
     empresas: string[];
     articulos: Record<string, string[]>;
   };
@@ -50,69 +48,15 @@ export const BudgetForm = ({
   brandAdjustments = {},
   presupuestoTotal = 0,
 }: BudgetFormProps) => {
-  const [mesInicio, setMesInicio] = useState<string>("");
-  const [mesFin, setMesFin] = useState<string>("");
   const [mesesReferencia, setMesesReferencia] = useState<string[]>([]);
   const [marcasPresupuesto, setMarcasPresupuesto] = useState<MarcaPresupuesto[]>([]);
   const [marcasConError, setMarcasConError] = useState<
-    Array<{ 
-      marca: string; 
-      fechaDestino: string; 
-      empresa: string; 
-      presupuesto: number; 
-      error: string;
-      tipoError: 'marca_invalida' | 'empresa_invalida' | 'fecha_invalida' | 'presupuesto_invalido' | 'datos_incompletos';
-      sugerencia?: string;
-    }>
+    Array<{ marca: string; fechaDestino: string; empresa: string; presupuesto: number; error: string }>
   >([]);
   const [excelFileName, setExcelFileName] = useState("");
   const [showMarcasCargadas, setShowMarcasCargadas] = useState(false);
   const [showMarcasError, setShowMarcasError] = useState(false);
-  const [showErrorDialog, setShowErrorDialog] = useState(false);
   const [dateFormatPreview, setDateFormatPreview] = useState<string>("");
-
-  // Calculate meses referencia from start/end selection
-  useEffect(() => {
-    if (!mesInicio && !mesFin) {
-      setMesesReferencia([]);
-      return;
-    }
-    
-    // If only one is set, use same value for both
-    const inicio = mesInicio || mesFin;
-    const fin = mesFin || mesInicio;
-    
-    const startIdx = mesesDisponibles.indexOf(inicio);
-    const endIdx = mesesDisponibles.indexOf(fin);
-    
-    if (startIdx === -1 || endIdx === -1) {
-      setMesesReferencia([]);
-      return;
-    }
-    
-    // mesesDisponibles is ordered from newest to oldest, so we need to handle range correctly
-    const minIdx = Math.min(startIdx, endIdx);
-    const maxIdx = Math.max(startIdx, endIdx);
-    
-    const selectedMeses = mesesDisponibles.slice(minIdx, maxIdx + 1);
-    setMesesReferencia(selectedMeses);
-  }, [mesInicio, mesFin, mesesDisponibles]);
-
-  const handleMesInicioChange = (value: string) => {
-    setMesInicio(value);
-    // Auto-complete mesFin if empty
-    if (!mesFin) {
-      setMesFin(value);
-    }
-  };
-
-  const handleMesFinChange = (value: string) => {
-    setMesFin(value);
-    // Auto-complete mesInicio if empty
-    if (!mesInicio) {
-      setMesInicio(value);
-    }
-  };
 
   const handleMesToggle = (mesAnio: string) => {
     setMesesReferencia((prev) => (prev.includes(mesAnio) ? prev.filter((m) => m !== mesAnio) : [...prev, mesAnio]));
@@ -121,14 +65,6 @@ export const BudgetForm = ({
   const handleExcelUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
-    console.log("📁 Excel upload - Marcas disponibles:", mockData.marcas.length, mockData.marcas.slice(0, 5));
-    
-    if (mockData.marcas.length === 0) {
-      toast.error("Espere a que se carguen las marcas de la base de datos antes de cargar el Excel");
-      e.target.value = "";
-      return;
-    }
 
     setExcelFileName(file.name);
     toast.info("Procesando archivo Excel...");
@@ -185,8 +121,6 @@ export const BudgetForm = ({
           empresa: string;
           presupuesto: number;
           error: string;
-          tipoError: 'marca_invalida' | 'empresa_invalida' | 'fecha_invalida' | 'presupuesto_invalido' | 'datos_incompletos';
-          sugerencia?: string;
         }> = [];
         let detectedFormat = "";
 
@@ -194,8 +128,7 @@ export const BudgetForm = ({
           const marca = row.Marca || row.marca;
           const fechaRaw = (row.Fecha || row.fecha)?.toString().trim() || "";
           const empresa = row.Empresa || row.empresa;
-          const presupuestoRaw = row.Presupuesto || row.presupuesto;
-          const presupuesto = parseFloat(presupuestoRaw);
+          const presupuesto = parseFloat(row.Presupuesto || row.presupuesto);
 
           // Detect date format from first valid row
           if (index === 0 && fechaRaw) {
@@ -207,102 +140,48 @@ export const BudgetForm = ({
           const parsedDate = parseDateFromExcel(fechaRaw);
           const fechaDestino = parsedDate ? formatDateToYYYYMMDD(parsedDate) : "";
 
-          // Validar presupuesto
-          if (isNaN(presupuesto) || presupuesto <= 0) {
+          // Validar que todos los campos estén presentes
+          if (!marca || !fechaDestino || !empresa || isNaN(presupuesto)) {
             if (marca) {
               errores.push({
                 marca,
                 fechaDestino: fechaRaw || "Sin fecha",
                 empresa: empresa || "Sin empresa",
                 presupuesto: presupuesto || 0,
-                error: `Presupuesto inválido: "${presupuestoRaw}"`,
-                tipoError: 'presupuesto_invalido',
-                sugerencia: 'El presupuesto debe ser un número positivo sin símbolos'
+                error: fechaDestino ? "Datos incompletos" : "Formato de fecha inválido",
               });
             }
             return;
           }
 
-          // Validar fecha
-          if (!fechaDestino) {
-            if (marca) {
-              errores.push({
-                marca,
-                fechaDestino: fechaRaw || "Sin fecha",
-                empresa: empresa || "Sin empresa",
-                presupuesto: presupuesto || 0,
-                error: `Formato de fecha inválido: "${fechaRaw}"`,
-                tipoError: 'fecha_invalida',
-                sugerencia: 'Use formato YYYY/MM/DD, DD/MM/YYYY o YYYY-MM-DD'
-              });
-            }
-            return;
-          }
-
-          // Validar datos completos
-          if (!marca || !empresa) {
-            errores.push({
-              marca: marca || "Sin marca",
-              fechaDestino,
-              empresa: empresa || "Sin empresa",
-              presupuesto,
-              error: "Datos incompletos",
-              tipoError: 'datos_incompletos',
-              sugerencia: 'Todas las columnas deben tener valores'
-            });
-            return;
-          }
-
-          // Validar que la marca exista en el maestro (check both codigo and nombre, case-insensitive)
-          let marcaEncontrada = mockData.marcas.find(
-            m => m.toLowerCase().trim() === marca.toLowerCase().trim()
-          );
-          
-          // Also check by codigo if marcasConCodigo is available
-          if (!marcaEncontrada && mockData.marcasConCodigo) {
-            const marcaPorCodigo = mockData.marcasConCodigo.find(
-              m => m.codigo.toLowerCase().trim() === marca.toLowerCase().trim()
-            );
-            if (marcaPorCodigo) {
-              marcaEncontrada = marcaPorCodigo.nombre;
-            }
-          }
-          
-          if (!marcaEncontrada) {
-            console.log("❌ Marca no encontrada:", marca, "Disponibles:", mockData.marcas.slice(0, 5));
+          // Validar que la marca exista en el maestro
+          if (!mockData.marcas.includes(marca)) {
             errores.push({
               marca,
               fechaDestino,
               empresa,
               presupuesto,
-              error: `Marca "${marca}" no existe en el maestro`,
-              tipoError: 'marca_invalida',
-              sugerencia: `Verifique que la marca esté registrada. Ejemplo: ${mockData.marcas[0] || 'N/A'}`
+              error: "Marca no existe en el maestro",
             });
             return;
           }
 
-          // Validar que la empresa exista en el maestro (case-insensitive)
-          const empresaEncontrada = mockData.empresas.find(
-            e => e.toLowerCase().trim() === empresa.toLowerCase().trim()
-          );
-          if (!empresaEncontrada) {
+          // Validar que la empresa exista en el maestro
+          if (!mockData.empresas.includes(empresa)) {
             errores.push({
               marca,
               fechaDestino,
               empresa,
               presupuesto,
-              error: `Empresa "${empresa}" no existe en el sistema`,
-              tipoError: 'empresa_invalida',
-              sugerencia: `Empresas válidas: ${mockData.empresas.join(', ')}`
+              error: `Empresa "${empresa}" no existe`,
             });
             return;
           }
 
           marcasFromExcel.push({
-            marca: marcaEncontrada, // Usar nombre exacto del sistema
+            marca,
             fechaDestino,
-            empresa: empresaEncontrada, // Usar nombre exacto del sistema
+            empresa,
             presupuesto,
           });
         });
@@ -311,9 +190,8 @@ export const BudgetForm = ({
         setMarcasConError(errores);
 
         if (marcasFromExcel.length === 0 && errores.length > 0) {
-          toast.error("No se encontraron datos válidos en el archivo. Haga clic en 'Ver errores' para más detalles.");
-          setShowErrorDialog(true);
-          setExcelFileName(file.name); // Mantener el nombre para mostrar errores
+          toast.error("No se encontraron datos válidos en el archivo");
+          setExcelFileName("");
           e.target.value = "";
           return;
         }
@@ -323,9 +201,8 @@ export const BudgetForm = ({
 
         if (errores.length > 0) {
           toast.warning(
-            `Archivo cargado con ${marcasFromExcel.length} marca(s) válida(s) y ${errores.length} error(es). Haga clic en el icono ⚠️ para ver detalles.`,
+            `Archivo cargado con ${marcasFromExcel.length} marca(s) válida(s) y ${errores.length} error(es)`,
           );
-          setShowErrorDialog(true);
         } else {
           toast.success(`${marcasFromExcel.length} marcas cargadas (Formato: ${detectedFormat})`);
         }
@@ -355,7 +232,6 @@ export const BudgetForm = ({
     if (fileInput) fileInput.value = "";
     setShowMarcasCargadas(false);
     setShowMarcasError(false);
-    setShowErrorDialog(false);
     toast.info("Archivo Excel removido");
   };
 
@@ -456,11 +332,10 @@ export const BudgetForm = ({
                   type="button"
                   variant="ghost"
                   size="icon"
-                  onClick={() => setShowErrorDialog(true)}
+                  onClick={() => setShowMarcasError(!showMarcasError)}
                   className="h-8 w-8"
-                  title="Ver errores detallados"
                 >
-                  <AlertTriangle className="h-4 w-4 text-destructive" />
+                  <Eye className="h-4 w-4 text-destructive" />
                 </Button>
               )}
               <Button
@@ -575,62 +450,42 @@ export const BudgetForm = ({
         </div>
       )}
 
-      {/* === Meses de Referencia (2 selects: inicio y fin) === */}
+      {/* === Meses de Referencia (tiles) === */}
       <div className="space-y-3">
-        <Label>Meses de Referencia *</Label>
-        
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <Label className="text-sm text-muted-foreground">Mes Inicio</Label>
-            <Select value={mesInicio} onValueChange={handleMesInicioChange}>
-              <SelectTrigger>
-                <SelectValue placeholder="Seleccione mes inicio" />
-              </SelectTrigger>
-              <SelectContent>
-                {mesesDisponibles.map((mesAnio) => (
-                  <SelectItem key={mesAnio} value={mesAnio}>
-                    {mesAnio}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          
-          <div className="space-y-2">
-            <Label className="text-sm text-muted-foreground">Mes Fin</Label>
-            <Select value={mesFin} onValueChange={handleMesFinChange}>
-              <SelectTrigger>
-                <SelectValue placeholder="Seleccione mes fin" />
-              </SelectTrigger>
-              <SelectContent>
-                {mesesDisponibles.map((mesAnio) => (
-                  <SelectItem key={mesAnio} value={mesAnio}>
-                    {mesAnio}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+        <div className="flex items-center justify-between">
+          <Label>Meses de Referencia (Mes-Año) *</Label>
+          {mesesReferencia.length > 0 && (
+            <Button type="button" variant="ghost" size="sm" onClick={() => setMesesReferencia([])}>
+              Limpiar
+            </Button>
+          )}
+        </div>
+
+        <div className="max-h-64 overflow-y-auto rounded-md border border-border bg-muted/30 p-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+            {mesesDisponibles.map((mesAnio) => {
+              const selected = mesesReferencia.includes(mesAnio);
+              return (
+                <button
+                  key={mesAnio}
+                  type="button"
+                  onClick={() => handleMesToggle(mesAnio)}
+                  aria-pressed={selected}
+                  className={[
+                    "relative w-full rounded-xl border px-3 py-2 text-sm font-medium text-left transition",
+                    "focus:outline-none focus:ring-2 focus:ring-offset-2",
+                    selected ? "border-blue-600 bg-blue-50 ring-blue-600" : "border-gray-300 hover:border-gray-400",
+                  ].join(" ")}
+                >
+                  <span className="block truncate pr-6">{mesAnio}</span>
+                  {selected && <Check className="absolute top-2 right-2 h-4 w-4" />}
+                </button>
+              );
+            })}
           </div>
         </div>
 
-        {mesesReferencia.length > 0 && (
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-muted-foreground">
-              Rango seleccionado: {mesesReferencia.length} mes(es)
-            </span>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                setMesInicio("");
-                setMesFin("");
-              }}
-            >
-              Limpiar
-            </Button>
-          </div>
-        )}
+        <p className="text-xs text-muted-foreground">Seleccionados: {mesesReferencia.length} mes(es)</p>
       </div>
 
       <Button type="submit" className="w-full">
@@ -708,16 +563,6 @@ export const BudgetForm = ({
           )}
         </div>
       )}
-
-      {/* Diálogo de errores detallado */}
-      <ExcelErrorDialog
-        errors={marcasConError}
-        validCount={marcasPresupuesto.length}
-        marcasDisponibles={mockData.marcas}
-        empresasDisponibles={mockData.empresas}
-        isOpen={showErrorDialog}
-        onOpenChange={setShowErrorDialog}
-      />
     </form>
   );
 };
