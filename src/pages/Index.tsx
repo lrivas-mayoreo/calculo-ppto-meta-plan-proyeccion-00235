@@ -708,6 +708,7 @@ const Index = () => {
                   onCalculate={handleCalculate} 
                   mockData={{
                     marcas: marcas.map(m => m.nombre),
+                    marcasConCodigo: marcas,
                     empresas: ["Cofersa", "Empresa Alpha", "Empresa Beta", "Empresa Gamma"],
                     articulos: marcas.reduce((acc, m) => {
                       acc[m.nombre] = [m.nombre];

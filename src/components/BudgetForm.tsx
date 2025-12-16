@@ -18,6 +18,7 @@ interface BudgetFormProps {
   onCalculate: (marcasPresupuesto: MarcaPresupuesto[], mesesReferencia: string[]) => void;
   mockData: {
     marcas: string[];
+    marcasConCodigo?: Array<{ codigo: string; nombre: string }>;
     empresas: string[];
     articulos: Record<string, string[]>;
   };
@@ -120,6 +121,14 @@ export const BudgetForm = ({
   const handleExcelUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    console.log("📁 Excel upload - Marcas disponibles:", mockData.marcas.length, mockData.marcas.slice(0, 5));
+    
+    if (mockData.marcas.length === 0) {
+      toast.error("Espere a que se carguen las marcas de la base de datos antes de cargar el Excel");
+      e.target.value = "";
+      return;
+    }
 
     setExcelFileName(file.name);
     toast.info("Procesando archivo Excel...");
@@ -244,11 +253,23 @@ export const BudgetForm = ({
             return;
           }
 
-          // Validar que la marca exista en el maestro (case-insensitive)
-          const marcaEncontrada = mockData.marcas.find(
+          // Validar que la marca exista en el maestro (check both codigo and nombre, case-insensitive)
+          let marcaEncontrada = mockData.marcas.find(
             m => m.toLowerCase().trim() === marca.toLowerCase().trim()
           );
+          
+          // Also check by codigo if marcasConCodigo is available
+          if (!marcaEncontrada && mockData.marcasConCodigo) {
+            const marcaPorCodigo = mockData.marcasConCodigo.find(
+              m => m.codigo.toLowerCase().trim() === marca.toLowerCase().trim()
+            );
+            if (marcaPorCodigo) {
+              marcaEncontrada = marcaPorCodigo.nombre;
+            }
+          }
+          
           if (!marcaEncontrada) {
+            console.log("❌ Marca no encontrada:", marca, "Disponibles:", mockData.marcas.slice(0, 5));
             errores.push({
               marca,
               fechaDestino,
@@ -256,7 +277,7 @@ export const BudgetForm = ({
               presupuesto,
               error: `Marca "${marca}" no existe en el maestro`,
               tipoError: 'marca_invalida',
-              sugerencia: 'Verifique que la marca esté registrada en el sistema'
+              sugerencia: `Verifique que la marca esté registrada. Ejemplo: ${mockData.marcas[0] || 'N/A'}`
             });
             return;
           }
