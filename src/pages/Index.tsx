@@ -195,7 +195,8 @@ const Index = () => {
         const userRoleId = roleData?.role_id;
         
         // Get allowed IDs based on role (handle pagination for large datasets)
-        const fetchAllFromPerRole = async (table: "marcas_per_role" | "clientes_per_role" | "vendedores_per_role", idColumn: string, roleId: string) => {
+        const fetchAllFromPerRole = async (table: "marcas_per_role" | "clientes_per_role" | "vendedores_per_role", idColumn: string, roleId: string | undefined) => {
+          if (!roleId) return [];
           const allIds: string[] = [];
           let page = 0;
           const pageSize = 1000;
@@ -213,11 +214,15 @@ const Index = () => {
           return allIds;
         };
 
+        console.log("🔍 userRoleId:", userRoleId);
+        
         const [allowedMarcaIds, allowedClienteIds, allowedVendedorIds] = await Promise.all([
           fetchAllFromPerRole("marcas_per_role", "marca_id", userRoleId),
           fetchAllFromPerRole("clientes_per_role", "cliente_id", userRoleId),
           fetchAllFromPerRole("vendedores_per_role", "vendedor_id", userRoleId),
         ]);
+        
+        console.log("📊 Allowed IDs:", { marcas: allowedMarcaIds.length, clientes: allowedClienteIds.length, vendedores: allowedVendedorIds.length });
         
         // Load data filtered by role permissions (batch for large ID sets)
         const fetchByIds = async (table: "clientes" | "marcas" | "vendedores", ids: string[]) => {
@@ -291,7 +296,8 @@ const Index = () => {
         const userRoleId2 = roleData?.role_id;
         
         // Get allowed IDs based on role (handle pagination for large datasets)
-        const fetchAllFromPerRole2 = async (table: "marcas_per_role" | "clientes_per_role" | "vendedores_per_role", idColumn: string, roleId: string) => {
+        const fetchAllFromPerRole2 = async (table: "marcas_per_role" | "clientes_per_role" | "vendedores_per_role", idColumn: string, roleId: string | undefined) => {
+          if (!roleId) return [];
           const allIds: string[] = [];
           let page = 0;
           const pageSize = 1000;
@@ -309,11 +315,15 @@ const Index = () => {
           return allIds;
         };
 
+        console.log("🔍 userRoleId2:", userRoleId2);
+        
         const [allowedMarcaIds2, allowedClienteIds2, allowedVendedorIds2] = await Promise.all([
           fetchAllFromPerRole2("marcas_per_role", "marca_id", userRoleId2),
           fetchAllFromPerRole2("clientes_per_role", "cliente_id", userRoleId2),
           fetchAllFromPerRole2("vendedores_per_role", "vendedor_id", userRoleId2),
         ]);
+        
+        console.log("📊 Allowed IDs2:", { marcas: allowedMarcaIds2.length, clientes: allowedClienteIds2.length, vendedores: allowedVendedorIds2.length });
         
         // Load data filtered by role permissions (batch for large ID sets)
         const fetchByIds2 = async (table: "clientes" | "marcas" | "vendedores", ids: string[]) => {
