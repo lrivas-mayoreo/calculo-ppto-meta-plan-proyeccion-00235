@@ -82,8 +82,8 @@ export const VendorClientTable = ({ result, vendorAdjustments, presupuestoTotal,
     
     // Load all codes mappings - need both directions
     const [clientsRes, brandsRes] = await Promise.all([
-      supabase.from('clientes').select('nombre, codigo').eq('user_id', user.id),
-      supabase.from('marcas').select('nombre, codigo').eq('user_id', user.id),
+      supabase.from('clientes').select('nombre, codigo'),
+      supabase.from('marcas').select('nombre, codigo'),
     ]);
     
     console.log("Clientes cargados:", clientsRes.data?.length || 0);
@@ -124,8 +124,7 @@ export const VendorClientTable = ({ result, vendorAdjustments, presupuestoTotal,
           .select('monto')
           .eq('mes', previousMonth)
           .eq('codigo_marca', codigoMarca)
-          .eq('codigo_cliente', codigoCliente)
-          .eq('user_id', user.id);
+          .eq('codigo_cliente', codigoCliente);
         
         if (error) {
           console.error("Error consultando ventas_reales:", error);
