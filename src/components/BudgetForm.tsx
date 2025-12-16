@@ -2,8 +2,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-// import { Checkbox } from "@/components/ui/checkbox"; // ya no se usa
-import { Calculator, Upload, X, Download, Eye, Info, Settings, Check } from "lucide-react";
+import { Calculator, Upload, X, Download, Eye, Info, Settings, Check, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
 import type { MarcaPresupuesto } from "@/pages/Index";
@@ -12,6 +11,7 @@ import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible";
 import { Badge } from "@/components/ui/badge";
 import { parseDateFromExcel, formatDateToYYYYMMDD, detectDateFormat } from "@/lib/dateUtils";
 import { SuggestedBudget } from "@/components/SuggestedBudget";
+import { ExcelErrorDialog } from "@/components/ExcelErrorDialog";
 
 interface BudgetFormProps {
   onCalculate: (marcasPresupuesto: MarcaPresupuesto[], mesesReferencia: string[]) => void;
@@ -51,11 +51,20 @@ export const BudgetForm = ({
   const [mesesReferencia, setMesesReferencia] = useState<string[]>([]);
   const [marcasPresupuesto, setMarcasPresupuesto] = useState<MarcaPresupuesto[]>([]);
   const [marcasConError, setMarcasConError] = useState<
-    Array<{ marca: string; fechaDestino: string; empresa: string; presupuesto: number; error: string }>
+    Array<{ 
+      marca: string; 
+      fechaDestino: string; 
+      empresa: string; 
+      presupuesto: number; 
+      error: string;
+      tipoError: 'marca_invalida' | 'empresa_invalida' | 'fecha_invalida' | 'presupuesto_invalido' | 'datos_incompletos';
+      sugerencia?: string;
+    }>
   >([]);
   const [excelFileName, setExcelFileName] = useState("");
   const [showMarcasCargadas, setShowMarcasCargadas] = useState(false);
   const [showMarcasError, setShowMarcasError] = useState(false);
+  const [showErrorDialog, setShowErrorDialog] = useState(false);
   const [dateFormatPreview, setDateFormatPreview] = useState<string>("");
 
   const handleMesToggle = (mesAnio: string) => {
@@ -121,6 +130,8 @@ export const BudgetForm = ({
           empresa: string;
           presupuesto: number;
           error: string;
+          tipoError: 'marca_invalida' | 'empresa_invalida' | 'fecha_invalida' | 'presupuesto_invalido' | 'datos_incompletos';
+          sugerencia?: string;
         }> = [];
         let detectedFormat = "";
 
@@ -128,7 +139,8 @@ export const BudgetForm = ({
           const marca = row.Marca || row.marca;
           const fechaRaw = (row.Fecha || row.fecha)?.toString().trim() || "";
           const empresa = row.Empresa || row.empresa;
-          const presupuesto = parseFloat(row.Presupuesto || row.presupuesto);
+          const presupuestoRaw = row.Presupuesto || row.presupuesto;
+          const presupuesto = parseFloat(presupuestoRaw);
 
           // Detect date format from first valid row
           if (index === 0 && fechaRaw) {
@@ -140,48 +152,90 @@ export const BudgetForm = ({
           const parsedDate = parseDateFromExcel(fechaRaw);
           const fechaDestino = parsedDate ? formatDateToYYYYMMDD(parsedDate) : "";
 
-          // Validar que todos los campos estén presentes
-          if (!marca || !fechaDestino || !empresa || isNaN(presupuesto)) {
+          // Validar presupuesto
+          if (isNaN(presupuesto) || presupuesto <= 0) {
             if (marca) {
               errores.push({
                 marca,
                 fechaDestino: fechaRaw || "Sin fecha",
                 empresa: empresa || "Sin empresa",
                 presupuesto: presupuesto || 0,
-                error: fechaDestino ? "Datos incompletos" : "Formato de fecha inválido",
+                error: `Presupuesto inválido: "${presupuestoRaw}"`,
+                tipoError: 'presupuesto_invalido',
+                sugerencia: 'El presupuesto debe ser un número positivo sin símbolos'
               });
             }
             return;
           }
 
-          // Validar que la marca exista en el maestro
-          if (!mockData.marcas.includes(marca)) {
+          // Validar fecha
+          if (!fechaDestino) {
+            if (marca) {
+              errores.push({
+                marca,
+                fechaDestino: fechaRaw || "Sin fecha",
+                empresa: empresa || "Sin empresa",
+                presupuesto: presupuesto || 0,
+                error: `Formato de fecha inválido: "${fechaRaw}"`,
+                tipoError: 'fecha_invalida',
+                sugerencia: 'Use formato YYYY/MM/DD, DD/MM/YYYY o YYYY-MM-DD'
+              });
+            }
+            return;
+          }
+
+          // Validar datos completos
+          if (!marca || !empresa) {
             errores.push({
-              marca,
+              marca: marca || "Sin marca",
               fechaDestino,
-              empresa,
+              empresa: empresa || "Sin empresa",
               presupuesto,
-              error: "Marca no existe en el maestro",
+              error: "Datos incompletos",
+              tipoError: 'datos_incompletos',
+              sugerencia: 'Todas las columnas deben tener valores'
             });
             return;
           }
 
-          // Validar que la empresa exista en el maestro
-          if (!mockData.empresas.includes(empresa)) {
+          // Validar que la marca exista en el maestro (case-insensitive)
+          const marcaEncontrada = mockData.marcas.find(
+            m => m.toLowerCase().trim() === marca.toLowerCase().trim()
+          );
+          if (!marcaEncontrada) {
             errores.push({
               marca,
               fechaDestino,
               empresa,
               presupuesto,
-              error: `Empresa "${empresa}" no existe`,
+              error: `Marca "${marca}" no existe en el maestro`,
+              tipoError: 'marca_invalida',
+              sugerencia: 'Verifique que la marca esté registrada en el sistema'
+            });
+            return;
+          }
+
+          // Validar que la empresa exista en el maestro (case-insensitive)
+          const empresaEncontrada = mockData.empresas.find(
+            e => e.toLowerCase().trim() === empresa.toLowerCase().trim()
+          );
+          if (!empresaEncontrada) {
+            errores.push({
+              marca,
+              fechaDestino,
+              empresa,
+              presupuesto,
+              error: `Empresa "${empresa}" no existe en el sistema`,
+              tipoError: 'empresa_invalida',
+              sugerencia: `Empresas válidas: ${mockData.empresas.join(', ')}`
             });
             return;
           }
 
           marcasFromExcel.push({
-            marca,
+            marca: marcaEncontrada, // Usar nombre exacto del sistema
             fechaDestino,
-            empresa,
+            empresa: empresaEncontrada, // Usar nombre exacto del sistema
             presupuesto,
           });
         });
@@ -190,8 +244,9 @@ export const BudgetForm = ({
         setMarcasConError(errores);
 
         if (marcasFromExcel.length === 0 && errores.length > 0) {
-          toast.error("No se encontraron datos válidos en el archivo");
-          setExcelFileName("");
+          toast.error("No se encontraron datos válidos en el archivo. Haga clic en 'Ver errores' para más detalles.");
+          setShowErrorDialog(true);
+          setExcelFileName(file.name); // Mantener el nombre para mostrar errores
           e.target.value = "";
           return;
         }
@@ -201,8 +256,9 @@ export const BudgetForm = ({
 
         if (errores.length > 0) {
           toast.warning(
-            `Archivo cargado con ${marcasFromExcel.length} marca(s) válida(s) y ${errores.length} error(es)`,
+            `Archivo cargado con ${marcasFromExcel.length} marca(s) válida(s) y ${errores.length} error(es). Haga clic en el icono ⚠️ para ver detalles.`,
           );
+          setShowErrorDialog(true);
         } else {
           toast.success(`${marcasFromExcel.length} marcas cargadas (Formato: ${detectedFormat})`);
         }
@@ -232,6 +288,7 @@ export const BudgetForm = ({
     if (fileInput) fileInput.value = "";
     setShowMarcasCargadas(false);
     setShowMarcasError(false);
+    setShowErrorDialog(false);
     toast.info("Archivo Excel removido");
   };
 
@@ -332,10 +389,11 @@ export const BudgetForm = ({
                   type="button"
                   variant="ghost"
                   size="icon"
-                  onClick={() => setShowMarcasError(!showMarcasError)}
+                  onClick={() => setShowErrorDialog(true)}
                   className="h-8 w-8"
+                  title="Ver errores detallados"
                 >
-                  <Eye className="h-4 w-4 text-destructive" />
+                  <AlertTriangle className="h-4 w-4 text-destructive" />
                 </Button>
               )}
               <Button
@@ -563,6 +621,16 @@ export const BudgetForm = ({
           )}
         </div>
       )}
+
+      {/* Diálogo de errores detallado */}
+      <ExcelErrorDialog
+        errors={marcasConError}
+        validCount={marcasPresupuesto.length}
+        marcasDisponibles={mockData.marcas}
+        empresasDisponibles={mockData.empresas}
+        isOpen={showErrorDialog}
+        onOpenChange={setShowErrorDialog}
+      />
     </form>
   );
 };

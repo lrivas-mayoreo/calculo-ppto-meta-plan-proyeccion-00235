@@ -618,12 +618,12 @@ const Index = () => {
                   onCalculate={handleCalculate} 
                   mockData={{
                     marcas: marcas.map(m => m.nombre),
-                    empresas: ["Empresa Alpha", "Empresa Beta", "Empresa Gamma"],
+                    empresas: ["Cofersa", "Empresa Alpha", "Empresa Beta", "Empresa Gamma"],
                     articulos: marcas.reduce((acc, m) => {
                       acc[m.nombre] = [m.nombre];
                       return acc;
                     }, {} as Record<string, string[]>)
-                  }} 
+                  }}
                   mesesDisponibles={mesesDisponibles} 
                   onMarcasPresupuestoLoad={setMarcasPresupuesto} 
                   historicalBudgets={allHistoricalBudgets} 
