@@ -12,7 +12,7 @@ interface ExcelError {
   empresa: string;
   presupuesto: number;
   error: string;
-  tipoError: 'marca_invalida' | 'empresa_invalida' | 'fecha_invalida' | 'presupuesto_invalido' | 'datos_incompletos';
+  tipoError: 'marca_invalida' | 'empresa_invalida' | 'fecha_invalida' | 'presupuesto_invalido' | 'datos_incompletos' | 'sin_datos_ventas';
   sugerencia?: string;
 }
 
@@ -48,6 +48,7 @@ export const ExcelErrorDialog = ({
       case 'fecha_invalida': return 'Fechas con formato inválido';
       case 'presupuesto_invalido': return 'Presupuestos inválidos';
       case 'datos_incompletos': return 'Datos incompletos';
+      case 'sin_datos_ventas': return 'Sin datos de ventas históricos';
       default: return 'Otros errores';
     }
   };
@@ -58,6 +59,7 @@ export const ExcelErrorDialog = ({
       case 'empresa_invalida': return <AlertTriangle className="h-4 w-4 text-red-500" />;
       case 'fecha_invalida': return <XCircle className="h-4 w-4 text-red-500" />;
       case 'presupuesto_invalido': return <XCircle className="h-4 w-4 text-red-500" />;
+      case 'sin_datos_ventas': return <Info className="h-4 w-4 text-amber-500" />;
       default: return <Info className="h-4 w-4 text-muted-foreground" />;
     }
   };
@@ -75,16 +77,30 @@ export const ExcelErrorDialog = ({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex gap-4 mb-4">
-          <div className="flex items-center gap-2 px-3 py-2 bg-green-500/10 rounded-md">
-            <CheckCircle className="h-4 w-4 text-green-500" />
-            <span className="text-sm font-medium">{validCount} válidos</span>
-          </div>
-          <div className="flex items-center gap-2 px-3 py-2 bg-destructive/10 rounded-md">
-            <XCircle className="h-4 w-4 text-destructive" />
-            <span className="text-sm font-medium">{errors.length} con errores</span>
-          </div>
-        </div>
+        {(() => {
+          const erroresCriticos = errors.filter(e => e.tipoError !== 'sin_datos_ventas').length;
+          const advertencias = errors.filter(e => e.tipoError === 'sin_datos_ventas').length;
+          return (
+            <div className="flex gap-4 mb-4">
+              <div className="flex items-center gap-2 px-3 py-2 bg-green-500/10 rounded-md">
+                <CheckCircle className="h-4 w-4 text-green-500" />
+                <span className="text-sm font-medium">{validCount} válidos</span>
+              </div>
+              {erroresCriticos > 0 && (
+                <div className="flex items-center gap-2 px-3 py-2 bg-destructive/10 rounded-md">
+                  <XCircle className="h-4 w-4 text-destructive" />
+                  <span className="text-sm font-medium">{erroresCriticos} con errores</span>
+                </div>
+              )}
+              {advertencias > 0 && (
+                <div className="flex items-center gap-2 px-3 py-2 bg-amber-500/10 rounded-md">
+                  <AlertTriangle className="h-4 w-4 text-amber-500" />
+                  <span className="text-sm font-medium">{advertencias} advertencias</span>
+                </div>
+              )}
+            </div>
+          );
+        })()}
 
         <ScrollArea className="max-h-[50vh]">
           <Accordion type="multiple" className="w-full" defaultValue={Object.keys(errorsByType)}>
@@ -232,6 +248,20 @@ export const ExcelErrorDialog = ({
                           <li>Debe ser un número positivo</li>
                           <li>Sin símbolos de moneda ($, €)</li>
                           <li>Separador decimal: punto (.)</li>
+                        </ul>
+                      </div>
+                    )}
+
+                    {type === 'sin_datos_ventas' && (
+                      <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-md space-y-2">
+                        <p className="text-sm font-medium flex items-center gap-2 text-amber-700 dark:text-amber-400">
+                          <Info className="h-4 w-4" />
+                          Estas marcas están registradas pero no tienen ventas históricas
+                        </p>
+                        <ul className="text-sm text-muted-foreground list-disc list-inside">
+                          <li>El presupuesto será cargado correctamente</li>
+                          <li>La distribución automática no funcionará sin datos históricos</li>
+                          <li>Puede asignar el presupuesto manualmente después del cálculo</li>
                         </ul>
                       </div>
                     )}

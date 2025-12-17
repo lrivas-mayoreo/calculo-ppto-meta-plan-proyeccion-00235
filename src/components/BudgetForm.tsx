@@ -61,7 +61,7 @@ export const BudgetForm = ({
       empresa: string; 
       presupuesto: number; 
       error: string;
-      tipoError: 'marca_invalida' | 'empresa_invalida' | 'fecha_invalida' | 'presupuesto_invalido' | 'datos_incompletos';
+      tipoError: 'marca_invalida' | 'empresa_invalida' | 'fecha_invalida' | 'presupuesto_invalido' | 'datos_incompletos' | 'sin_datos_ventas';
       sugerencia?: string;
     }>
   >([]);
@@ -185,7 +185,7 @@ export const BudgetForm = ({
           empresa: string;
           presupuesto: number;
           error: string;
-          tipoError: 'marca_invalida' | 'empresa_invalida' | 'fecha_invalida' | 'presupuesto_invalido' | 'datos_incompletos';
+          tipoError: 'marca_invalida' | 'empresa_invalida' | 'fecha_invalida' | 'presupuesto_invalido' | 'datos_incompletos' | 'sin_datos_ventas';
           sugerencia?: string;
         }> = [];
         let detectedFormat = "";
@@ -297,6 +297,24 @@ export const BudgetForm = ({
               sugerencia: `Empresas válidas: ${mockData.empresas.join(', ')}`
             });
             return;
+          }
+
+          // Verificar si la marca tiene datos de ventas en los meses de referencia
+          const ventasDeMarca = ventasData.filter(
+            v => v.marca.toLowerCase().trim() === marcaEncontrada!.toLowerCase().trim() &&
+                 v.empresa.toLowerCase().trim() === empresaEncontrada.toLowerCase().trim()
+          );
+          
+          if (ventasDeMarca.length === 0) {
+            errores.push({
+              marca: marcaEncontrada!,
+              fechaDestino,
+              empresa: empresaEncontrada,
+              presupuesto,
+              error: `Sin datos de ventas históricos`,
+              tipoError: 'sin_datos_ventas',
+              sugerencia: 'No se encontraron ventas para esta marca/empresa en los meses disponibles. El presupuesto se cargará pero no se podrá distribuir automáticamente.'
+            });
           }
 
           marcasFromExcel.push({
