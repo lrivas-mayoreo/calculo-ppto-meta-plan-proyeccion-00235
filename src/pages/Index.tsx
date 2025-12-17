@@ -13,12 +13,16 @@ import { SuggestedBudget } from "@/components/SuggestedBudget";
 import { DataImport } from "@/components/DataImport";
 import { CSVImport } from "@/components/CSVImport";
 import { VendorBudgetView } from "@/components/VendorBudgetView";
-import { Calculator, TrendingUp, Calendar, Users, LogOut, Shield } from "lucide-react";
+import { Calculator, TrendingUp, Calendar, Users, LogOut, Shield, AlertTriangle, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import type { Session, User } from "@supabase/supabase-js";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Badge } from "@/components/ui/badge";
 
 // Datos de ejemplo simulados - Ventas por marca, cliente, artículo, vendedor, empresa y mes-año
 const MOCK_DATA = {
@@ -136,6 +140,9 @@ const Index = () => {
     presupuesto: number;
     fechaDestino: string;
   }>>([]);
+  
+  // Dialog state for calculation errors
+  const [showCalculationErrorsDialog, setShowCalculationErrorsDialog] = useState(false);
   
   // Real data from Supabase
   const [isLoadingData, setIsLoadingData] = useState(true);
@@ -846,9 +853,10 @@ const Index = () => {
                     <MetricsCard 
                       title="Errores" 
                       value={result.errores.length.toString()} 
-                      icon={Users} 
+                      icon={AlertTriangle} 
                       trend={result.errores.length > 0 ? "negative" : "positive"} 
-                      subtitle="Marcas con error" 
+                      subtitle="Click para ver detalles"
+                      onClick={() => result.errores.length > 0 && setShowCalculationErrorsDialog(true)}
                     />
                   </div>
 
@@ -939,9 +947,10 @@ const Index = () => {
                     <MetricsCard 
                       title="Errores" 
                       value={result.errores.length.toString()} 
-                      icon={Users} 
+                      icon={AlertTriangle} 
                       trend={result.errores.length > 0 ? "negative" : "positive"} 
-                      subtitle="Marcas con error" 
+                      subtitle="Click para ver detalles"
+                      onClick={() => result.errores.length > 0 && setShowCalculationErrorsDialog(true)}
                     />
                   </div>
 
@@ -967,7 +976,80 @@ const Index = () => {
             </div>
           </div>
         )}
-      </main>
+      {/* Diálogo de errores de cálculo */}
+      <Dialog open={showCalculationErrorsDialog} onOpenChange={setShowCalculationErrorsDialog}>
+        <DialogContent className="max-w-2xl max-h-[80vh]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-destructive" />
+              Errores en el Cálculo de Presupuesto
+            </DialogTitle>
+            <DialogDescription>
+              {result?.errores.length || 0} marca(s) no pudieron ser procesadas correctamente
+            </DialogDescription>
+          </DialogHeader>
+
+          <ScrollArea className="max-h-[50vh]">
+            {result?.errores && result.errores.length > 0 ? (
+              <div className="space-y-4">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Marca</TableHead>
+                      <TableHead>Empresa</TableHead>
+                      <TableHead>Fecha Destino</TableHead>
+                      <TableHead>Causa del Error</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {result.errores.map((error, idx) => (
+                      <TableRow key={idx}>
+                        <TableCell className="font-medium">{error.marca}</TableCell>
+                        <TableCell>{error.empresa}</TableCell>
+                        <TableCell>{error.fechaDestino}</TableCell>
+                        <TableCell>
+                          <div className="flex items-start gap-2">
+                            <Info className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                            <span className="text-sm text-muted-foreground">{error.mensaje}</span>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+
+                <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-md">
+                  <p className="text-sm font-medium flex items-center gap-2 text-amber-700 dark:text-amber-400">
+                    <Info className="h-4 w-4" />
+                    ¿Por qué ocurren estos errores?
+                  </p>
+                  <ul className="text-sm text-muted-foreground list-disc list-inside mt-2 space-y-1">
+                    <li><strong>Sin datos de ventas:</strong> No hay ventas históricas para esta marca/empresa en los meses de referencia seleccionados</li>
+                    <li><strong>Datos incompletos:</strong> Faltan campos requeridos como marca, empresa o fecha</li>
+                    <li><strong>Formato inválido:</strong> El presupuesto o fecha tienen un formato incorrecto</li>
+                  </ul>
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-8 text-center">
+                <Badge variant="outline" className="text-green-600 border-green-600">
+                  Sin errores
+                </Badge>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  Todas las marcas fueron procesadas correctamente
+                </p>
+              </div>
+            )}
+          </ScrollArea>
+
+          <div className="flex justify-end pt-4 border-t">
+            <Button variant="outline" onClick={() => setShowCalculationErrorsDialog(false)}>
+              Cerrar
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </main>
     </div>;
 };
 export default Index;

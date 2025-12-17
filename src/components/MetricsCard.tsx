@@ -8,6 +8,7 @@ interface MetricsCardProps {
   icon: LucideIcon;
   trend?: "positive" | "negative" | "neutral";
   subtitle?: string;
+  onClick?: () => void;
 }
 
 export const MetricsCard = ({
@@ -16,9 +17,16 @@ export const MetricsCard = ({
   icon: Icon,
   trend = "neutral",
   subtitle,
+  onClick,
 }: MetricsCardProps) => {
   return (
-    <Card className="p-5 shadow-md transition-all hover:shadow-lg">
+    <Card 
+      className={cn(
+        "p-5 shadow-md transition-all hover:shadow-lg",
+        onClick && "cursor-pointer hover:ring-2 hover:ring-primary/20"
+      )}
+      onClick={onClick}
+    >
       <div className="flex items-start justify-between">
         <div className="flex-1">
           <p className="text-sm font-medium text-muted-foreground">{title}</p>
