@@ -138,6 +138,7 @@ const Index = () => {
   }>>([]);
   
   // Real data from Supabase
+  const [isLoadingData, setIsLoadingData] = useState(true);
   const [clientes, setClientes] = useState<Array<{ codigo: string; nombre: string }>>([]);
   const [marcas, setMarcas] = useState<Array<{ codigo: string; nombre: string }>>([]);
   const [vendedores, setVendedores] = useState<Array<{ codigo: string; nombre: string }>>([]);
@@ -248,6 +249,7 @@ const Index = () => {
         setMarcas(marcasData);
         setVendedores(vendedoresData);
         if (ventasRes.data) setVentas(ventasRes.data);
+        setIsLoadingData(false);
       }
     });
     supabase.auth.getSession().then(async ({
@@ -349,6 +351,7 @@ const Index = () => {
         setMarcas(marcasData2);
         setVendedores(vendedoresData2);
         if (ventasRes2.data) setVentas(ventasRes2.data);
+        setIsLoadingData(false);
       }
     });
     return () => subscription.unsubscribe();
@@ -703,8 +706,16 @@ const Index = () => {
           <VendorBudgetView />
         ) : (
           <div className="space-y-6">
+            {isLoadingData ? (
+              <Card className="p-6 shadow-md">
+                <div className="flex flex-col items-center justify-center py-12 space-y-4">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+                  <p className="text-muted-foreground">Cargando datos...</p>
+                </div>
+              </Card>
+            ) : (
             <Card className="p-6 shadow-md">
-                <BudgetForm 
+                <BudgetForm
                   onCalculate={handleCalculate} 
                   mockData={{
                     marcas: marcas.map(m => m.nombre),
@@ -766,6 +777,7 @@ const Index = () => {
                   presupuestoTotal={marcasPresupuesto.reduce((sum, mp) => sum + mp.presupuesto, 0)}
                 />
             </Card>
+            )}
 
             <div>
             {activeRole === "administrador" ? <Tabs defaultValue="results" className="space-y-6">
