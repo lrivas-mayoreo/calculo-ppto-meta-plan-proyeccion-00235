@@ -18,7 +18,8 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import type { Session, User } from "@supabase/supabase-js";
+import { useAuthSession } from "@/hooks/useAuthSession";
+
 
 // Datos de ejemplo simulados - Ventas por marca, cliente, artículo, vendedor, empresa y mes-año
 const MOCK_DATA = {
@@ -119,12 +120,14 @@ export interface CalculationResult {
 }
 const Index = () => {
   const navigate = useNavigate();
-  const [session, setSession] = useState<Session | null>(null);
-  const [user, setUser] = useState<User | null>(null);
+  const { session, user, loading: authLoading } = useAuthSession();
+
   const [userRole, setUserRole] = useState<string | null>(null);
   const [simulatedRole, setSimulatedRole] = useState<string | null>(null);
+  const [isRoleLoading, setIsRoleLoading] = useState(false);
   const [result, setResult] = useState<CalculationResult | null>(null);
   const [marcasPresupuesto, setMarcasPresupuesto] = useState<MarcaPresupuesto[]>([]);
+
   const [vendorAdjustments, setVendorAdjustments] = useState<Record<string, {
     value: number;
     type: "percentage" | "currency";
@@ -150,215 +153,167 @@ const Index = () => {
     monto: number;
   }>>([]);
   useEffect(() => {
-    const {
-      data: {
-        subscription
-      }
-    } = supabase.auth.onAuthStateChange(async (event, session) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (!session) {
-        navigate("/auth");
-      } else {
-        // Load user role
-        const {
-          data: roleData
-        } = await supabase.from("user_roles").select("role_id, roles(nombre)").eq("user_id", session.user.id).maybeSingle();
-        const role = (roleData?.roles as any)?.nombre || null;
-        setUserRole(role);
-        setSimulatedRole(role);
+    if (!authLoading && !session) {
+      navigate("/auth");
+    }
+  }, [authLoading, session, navigate]);
 
-        // Load historical budgets from database
-        const {
-          data: budgets
-        } = await supabase.from("budgets").select("marca, empresa, presupuesto, fecha_destino, vendor_adjustments").eq("user_id", session.user.id);
-        if (budgets && budgets.length > 0) {
-          const historicalData = budgets.map(b => ({
-            marca: b.marca,
-            empresa: b.empresa,
-            presupuesto: b.presupuesto,
-            fechaDestino: b.fecha_destino
-          }));
-          setAllHistoricalBudgets(historicalData);
-          
-          // Load vendor adjustments from last budget
-          if (budgets[0]?.vendor_adjustments) {
-            const adjustments = budgets[0].vendor_adjustments as any;
-            if (adjustments.brandAdjustments) {
-              setBrandAdjustments(adjustments.brandAdjustments);
-            } else {
-              setVendorAdjustments(adjustments);
-            }
+  useEffect(() => {
+    if (!user?.id) {
+      setUserRole(null);
+      setSimulatedRole(null);
+      return;
+    }
+
+    let cancelled = false;
+
+    const fetchAllFromPerRole = async (
+      table: "marcas_per_role" | "clientes_per_role" | "vendedores_per_role",
+      idColumn: string,
+      roleId: string | undefined
+    ) => {
+      if (!roleId) return [];
+      const allIds: string[] = [];
+      let page = 0;
+      const pageSize = 1000;
+      while (true) {
+        const { data, error } = await supabase
+          .from(table)
+          .select(idColumn)
+          .eq("role_id", roleId)
+          .range(page * pageSize, (page + 1) * pageSize - 1);
+        if (error) throw error;
+        if (!data || data.length === 0) break;
+        allIds.push(...data.map((d: any) => d[idColumn]));
+        if (data.length < pageSize) break;
+        page++;
+      }
+      return allIds;
+    };
+
+    const fetchByIds = async (
+      table: "clientes" | "marcas" | "vendedores",
+      ids: string[]
+    ) => {
+      if (ids.length === 0) return [];
+      const allData: { codigo: string; nombre: string }[] = [];
+      const batchSize = 500;
+      for (let i = 0; i < ids.length; i += batchSize) {
+        const batch = ids.slice(i, i + batchSize);
+        const { data, error } = await supabase
+          .from(table)
+          .select("codigo, nombre")
+          .in("id", batch);
+        if (error) throw error;
+        if (data) allData.push(...data);
+      }
+      return allData;
+    };
+
+    const loadUserContext = async () => {
+      setIsRoleLoading(true);
+      setIsLoadingData(true);
+
+      // 1) Cargar rol (rápido) — esto actualiza la UI antes del resto de cargas pesadas
+      const { data: roleData, error: roleError } = await supabase
+        .from("user_roles")
+        .select("role_id, roles(nombre)")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      if (roleError) throw roleError;
+      if (cancelled) return;
+
+      const role = (roleData?.roles as any)?.nombre || null;
+      setUserRole(role);
+      setSimulatedRole(role);
+
+      // 2) Cargar presupuestos históricos
+      const { data: budgets, error: budgetsError } = await supabase
+        .from("budgets")
+        .select("marca, empresa, presupuesto, fecha_destino, vendor_adjustments")
+        .eq("user_id", user.id);
+
+      if (budgetsError) throw budgetsError;
+      if (cancelled) return;
+
+      if (budgets && budgets.length > 0) {
+        const historicalData = budgets.map((b) => ({
+          marca: b.marca,
+          empresa: b.empresa,
+          presupuesto: b.presupuesto,
+          fechaDestino: b.fecha_destino,
+        }));
+        setAllHistoricalBudgets(historicalData);
+
+        if (budgets[0]?.vendor_adjustments) {
+          const adjustments = budgets[0].vendor_adjustments as any;
+          if (adjustments.brandAdjustments) {
+            setBrandAdjustments(adjustments.brandAdjustments);
+          } else {
+            setVendorAdjustments(adjustments);
           }
         }
-        
-        // Load real data from Supabase filtered by role permissions
-        const userRoleId = roleData?.role_id;
-        
-        // Get allowed IDs based on role (handle pagination for large datasets)
-        const fetchAllFromPerRole = async (table: "marcas_per_role" | "clientes_per_role" | "vendedores_per_role", idColumn: string, roleId: string | undefined) => {
-          if (!roleId) return [];
-          const allIds: string[] = [];
-          let page = 0;
-          const pageSize = 1000;
-          while (true) {
-            const { data } = await supabase
-              .from(table)
-              .select(idColumn)
-              .eq("role_id", roleId)
-              .range(page * pageSize, (page + 1) * pageSize - 1);
-            if (!data || data.length === 0) break;
-            allIds.push(...data.map((d: any) => d[idColumn]));
-            if (data.length < pageSize) break;
-            page++;
-          }
-          return allIds;
-        };
+      }
 
-        console.log("🔍 userRoleId:", userRoleId);
-        
-        const [allowedMarcaIds, allowedClienteIds, allowedVendedorIds] = await Promise.all([
+      // 3) Cargar maestros filtrados por permisos del rol
+      const userRoleId = roleData?.role_id;
+
+      const [allowedMarcaIds, allowedClienteIds, allowedVendedorIds] =
+        await Promise.all([
           fetchAllFromPerRole("marcas_per_role", "marca_id", userRoleId),
           fetchAllFromPerRole("clientes_per_role", "cliente_id", userRoleId),
           fetchAllFromPerRole("vendedores_per_role", "vendedor_id", userRoleId),
         ]);
-        
-        console.log("📊 Allowed IDs:", { marcas: allowedMarcaIds.length, clientes: allowedClienteIds.length, vendedores: allowedVendedorIds.length });
-        
-        // Load data filtered by role permissions (batch for large ID sets)
-        const fetchByIds = async (table: "clientes" | "marcas" | "vendedores", ids: string[]) => {
-          if (ids.length === 0) return [];
-          const allData: { codigo: string; nombre: string }[] = [];
-          const batchSize = 500;
-          for (let i = 0; i < ids.length; i += batchSize) {
-            const batch = ids.slice(i, i + batchSize);
-            const { data } = await supabase.from(table).select("codigo, nombre").in("id", batch);
-            if (data) allData.push(...data);
-          }
-          return allData;
-        };
 
-        const [clientesData, marcasData, vendedoresData, ventasRes] = await Promise.all([
+      if (cancelled) return;
+
+      const [clientesData, marcasData, vendedoresData, ventasRes] =
+        await Promise.all([
           fetchByIds("clientes", allowedClienteIds),
           fetchByIds("marcas", allowedMarcaIds),
           fetchByIds("vendedores", allowedVendedorIds),
-          supabase.from("ventas_reales").select("mes, codigo_marca, codigo_cliente, codigo_vendedor, monto").limit(50000)
+          supabase
+            .from("ventas_reales")
+            .select("mes, codigo_marca, codigo_cliente, codigo_vendedor, monto")
+            .limit(50000),
         ]);
-        
-        setClientes(clientesData);
-        setMarcas(marcasData);
-        setVendedores(vendedoresData);
-        if (ventasRes.data) setVentas(ventasRes.data);
-        setIsLoadingData(false);
-      }
-    });
-    supabase.auth.getSession().then(async ({
-      data: {
-        session
-      }
-    }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (!session) {
-        navigate("/auth");
-      } else {
-        // Load user role
-        const {
-          data: roleData
-        } = await supabase.from("user_roles").select("role_id, roles(nombre)").eq("user_id", session.user.id).maybeSingle();
-        const role = (roleData?.roles as any)?.nombre || null;
-        setUserRole(role);
-        setSimulatedRole(role);
 
-        // Load historical budgets from database
-        const {
-          data: budgets
-        } = await supabase.from("budgets").select("marca, empresa, presupuesto, fecha_destino, vendor_adjustments").eq("user_id", session.user.id);
-        if (budgets && budgets.length > 0) {
-          const historicalData = budgets.map(b => ({
-            marca: b.marca,
-            empresa: b.empresa,
-            presupuesto: b.presupuesto,
-            fechaDestino: b.fecha_destino
-          }));
-          setAllHistoricalBudgets(historicalData);
-          
-          // Load vendor adjustments from last budget
-          if (budgets[0]?.vendor_adjustments) {
-            const adjustments = budgets[0].vendor_adjustments as any;
-            if (adjustments.brandAdjustments) {
-              setBrandAdjustments(adjustments.brandAdjustments);
-            } else {
-              setVendorAdjustments(adjustments);
-            }
-          }
+      if (cancelled) return;
+
+      setClientes(clientesData);
+      setMarcas(marcasData);
+      setVendedores(vendedoresData);
+      if (ventasRes.data) setVentas(ventasRes.data);
+    };
+
+    loadUserContext()
+      .catch((error) => {
+        console.error("Error loading user context:", error);
+        toast.error("No se pudieron cargar tus permisos/rol.");
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsRoleLoading(false);
+          setIsLoadingData(false);
         }
-        
-        // Load real data from Supabase filtered by role permissions
-        const userRoleId2 = roleData?.role_id;
-        
-        // Get allowed IDs based on role (handle pagination for large datasets)
-        const fetchAllFromPerRole2 = async (table: "marcas_per_role" | "clientes_per_role" | "vendedores_per_role", idColumn: string, roleId: string | undefined) => {
-          if (!roleId) return [];
-          const allIds: string[] = [];
-          let page = 0;
-          const pageSize = 1000;
-          while (true) {
-            const { data } = await supabase
-              .from(table)
-              .select(idColumn)
-              .eq("role_id", roleId)
-              .range(page * pageSize, (page + 1) * pageSize - 1);
-            if (!data || data.length === 0) break;
-            allIds.push(...data.map((d: any) => d[idColumn]));
-            if (data.length < pageSize) break;
-            page++;
-          }
-          return allIds;
-        };
+      });
 
-        console.log("🔍 userRoleId2:", userRoleId2);
-        
-        const [allowedMarcaIds2, allowedClienteIds2, allowedVendedorIds2] = await Promise.all([
-          fetchAllFromPerRole2("marcas_per_role", "marca_id", userRoleId2),
-          fetchAllFromPerRole2("clientes_per_role", "cliente_id", userRoleId2),
-          fetchAllFromPerRole2("vendedores_per_role", "vendedor_id", userRoleId2),
-        ]);
-        
-        console.log("📊 Allowed IDs2:", { marcas: allowedMarcaIds2.length, clientes: allowedClienteIds2.length, vendedores: allowedVendedorIds2.length });
-        
-        // Load data filtered by role permissions (batch for large ID sets)
-        const fetchByIds2 = async (table: "clientes" | "marcas" | "vendedores", ids: string[]) => {
-          if (ids.length === 0) return [];
-          const allData: { codigo: string; nombre: string }[] = [];
-          const batchSize = 500;
-          for (let i = 0; i < ids.length; i += batchSize) {
-            const batch = ids.slice(i, i + batchSize);
-            const { data } = await supabase.from(table).select("codigo, nombre").in("id", batch);
-            if (data) allData.push(...data);
-          }
-          return allData;
-        };
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id]);
 
-        const [clientesData2, marcasData2, vendedoresData2, ventasRes2] = await Promise.all([
-          fetchByIds2("clientes", allowedClienteIds2),
-          fetchByIds2("marcas", allowedMarcaIds2),
-          fetchByIds2("vendedores", allowedVendedorIds2),
-          supabase.from("ventas_reales").select("mes, codigo_marca, codigo_cliente, codigo_vendedor, monto").limit(50000)
-        ]);
-        
-        setClientes(clientesData2);
-        setMarcas(marcasData2);
-        setVendedores(vendedoresData2);
-        if (ventasRes2.data) setVentas(ventasRes2.data);
-        setIsLoadingData(false);
-      }
-    });
-    return () => subscription.unsubscribe();
-  }, [navigate]);
   const handleSignOut = async () => {
-    await supabase.auth.signOut();
-    navigate("/auth");
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
+      toast.success("Sesión cerrada");
+      navigate("/auth", { replace: true });
+    } catch (error) {
+      console.error("Error signing out:", error);
+      toast.error("No se pudo cerrar sesión");
+    }
   };
   const handleCalculate = (marcasPresupuesto: MarcaPresupuesto[], mesesReferencia: string[]) => {
     console.log('🎯 Iniciando cálculo con:', { 
@@ -665,26 +620,46 @@ const Index = () => {
                   <span className="text-sm font-medium text-foreground">
                     {user.email}
                   </span>
-                  <div className="flex items-center gap-3 mt-1">
-                    {userRole ? <>
-                        <span className="text-xs font-semibold text-primary bg-primary/10 px-3 py-1 rounded-full border border-primary/20">
-                          <Shield className="h-3 w-3 inline mr-1" />
-                          {userRole === "admin_ventas" ? "Admin. Ventas" : userRole === "administrador" ? "Administrador" : userRole === "gerente" ? "Gerente" : userRole === "vendedor" ? "Vendedor" : userRole === "contabilidad" ? "Contabilidad" : userRole}
+                    <div className="flex items-center gap-3 mt-1">
+                      {userRole ? (
+                        <>
+                          <span className="text-xs font-semibold text-primary bg-primary/10 px-3 py-1 rounded-full border border-primary/20">
+                            <Shield className="h-3 w-3 inline mr-1" />
+                            {userRole === "admin_ventas"
+                              ? "Admin. Ventas"
+                              : userRole === "administrador"
+                                ? "Administrador"
+                                : userRole === "gerente"
+                                  ? "Gerente"
+                                  : userRole === "vendedor"
+                                    ? "Vendedor"
+                                    : userRole === "contabilidad"
+                                      ? "Contabilidad"
+                                      : userRole}
+                          </span>
+                          <Select value={activeRole || undefined} onValueChange={handleRoleChange}>
+                            <SelectTrigger className="h-7 w-[140px] text-xs">
+                              <SelectValue placeholder="Ver como..." />
+                            </SelectTrigger>
+                            <SelectContent className="bg-card z-50">
+                              {availableRoles.map((role) => (
+                                <SelectItem key={role.value} value={role.value}>
+                                  {role.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </>
+                      ) : isRoleLoading ? (
+                        <span className="text-xs text-muted-foreground bg-muted px-3 py-1 rounded-full">
+                          Verificando rol...
                         </span>
-                        <Select value={activeRole || undefined} onValueChange={handleRoleChange}>
-                          <SelectTrigger className="h-7 w-[140px] text-xs">
-                            <SelectValue placeholder="Ver como..." />
-                          </SelectTrigger>
-                          <SelectContent className="bg-card z-50">
-                            {availableRoles.map(role => <SelectItem key={role.value} value={role.value}>
-                                {role.label}
-                              </SelectItem>)}
-                          </SelectContent>
-                        </Select>
-                      </> : <span className="text-xs text-muted-foreground bg-muted px-3 py-1 rounded-full">
-                        Sin rol asignado
-                      </span>}
-                  </div>
+                      ) : (
+                        <span className="text-xs text-muted-foreground bg-muted px-3 py-1 rounded-full">
+                          Sin rol asignado
+                        </span>
+                      )}
+                    </div>
                 </div>
               </div>
               {activeRole === "contabilidad" && (
