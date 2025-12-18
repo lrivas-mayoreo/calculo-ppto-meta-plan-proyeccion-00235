@@ -1,508 +1,152 @@
-import { useState, useEffect } from "react";
-import { Card } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import React, { useState, useMemo } from "react";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { toast } from "sonner";
-import { Users, DollarSign, Download } from "lucide-react";
-import type { CalculationResult } from "@/pages/Index";
-import { supabase } from "@/integrations/supabase/client";
-import * as XLSX from "xlsx";
+import { Progress } from "@/components/ui/progress";
+import { ChevronDown, ChevronRight, Search, TrendingUp, Users, DollarSign } from "lucide-react";
+import { CalculationResult } from "../pages/Index";
 
 interface VendorClientTableProps {
   result: CalculationResult;
   vendorAdjustments: Record<string, { value: number; type: "percentage" | "currency" }>;
-  presupuestoTotal: number;
-  userRole: string | null;
-  marcasPresupuesto: Array<{ marca: string; empresa: string; presupuesto: number; fechaDestino: string }>;
-  userId: string;
-  onBrandAdjustmentsChange?: (adjustments: Record<string, number>) => void;
+  // ... otros props existentes
 }
 
-interface VendorClientData {
-  vendedor: string;
-  cliente: string;
-  empresa: string;
-  marca: string;
-  presupuestoAsignado: number;
-  ventasReales: number;
-  ventaMesAnterior: number;
-  ajusteManual: number;
-  ajusteMarca: number;
-  key: string;
-}
+export const VendorClientTable = ({ result }: VendorClientTableProps) => {
+  const [expandedBrands, setExpandedBrands] = useState<Record<string, boolean>>({});
+  const [searchTerm, setSearchTerm] = useState("");
 
-export const VendorClientTable = ({ result, vendorAdjustments, presupuestoTotal, userRole, marcasPresupuesto, userId, onBrandAdjustmentsChange }: VendorClientTableProps) => {
-  const [vendorClientData, setVendorClientData] = useState<VendorClientData[]>([]);
-  const [manualAdjustments, setManualAdjustments] = useState<Record<string, number>>({});
-  const [brandAdjustments, setBrandAdjustments] = useState<Record<string, number>>({});
-  const [editingVendor, setEditingVendor] = useState<{ key: string; newVendor: string } | null>(null);
-  const [previousMonthSales, setPreviousMonthSales] = useState<Record<string, number>>({});
-
-  useEffect(() => {
-    loadPreviousMonthSales();
-  }, [result]);
-
-  useEffect(() => {
-    calculateVendorClientData();
-  }, [result, previousMonthSales, brandAdjustments]);
-
-  const getPreviousMonth = (fechaDestino: string): string => {
-    // Parse fecha in format YYYY/MM/DD and return the full previous month range
-    const parts = fechaDestino.split('/');
-    const year = parseInt(parts[0]);
-    const month = parseInt(parts[1]);
-    
-    const date = new Date(year, month - 1, 1);
-    date.setMonth(date.getMonth() - 1);
-    
-    const prevYear = date.getFullYear();
-    const prevMonth = String(date.getMonth() + 1).padStart(2, '0');
-    
-    // Return format YYYY/MM for querying all sales in that month
-    return `${prevYear}/${prevMonth}`;
+  const toggleBrand = (brand: string) => {
+    setExpandedBrands((prev) => ({ ...prev, [brand]: !prev[brand] }));
   };
 
-  const loadPreviousMonthSales = async () => {
-    const salesByKey: Record<string, number> = {};
-    
-    // Get user session
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-    
-    console.log("=== DEBUG VENTAS MES ANTERIOR ===");
-    
-    // Get user's role to filter data
-    const { data: userRole } = await supabase
-      .from("user_roles")
-      .select("role_id")
-      .eq("user_id", user.id)
-      .maybeSingle();
-
-    const userRoleId = userRole?.role_id;
-
-    // Get allowed IDs based on role
-    const [allowedMarcasRes, allowedClientesRes] = await Promise.all([
-      supabase.from("marcas_per_role").select("marca_id").eq("role_id", userRoleId),
-      supabase.from("clientes_per_role").select("cliente_id").eq("role_id", userRoleId),
-    ]);
-
-    const allowedMarcaIds = allowedMarcasRes.data?.map(m => m.marca_id) || [];
-    const allowedClienteIds = allowedClientesRes.data?.map(c => c.cliente_id) || [];
-
-    // Load codes mappings filtered by role permissions
-    const clientsRes = allowedClienteIds.length > 0 
-      ? await supabase.from('clientes').select('nombre, codigo').in('id', allowedClienteIds)
-      : { data: [] as { nombre: string; codigo: string }[] };
-    const brandsRes = allowedMarcaIds.length > 0 
-      ? await supabase.from('marcas').select('nombre, codigo').in('id', allowedMarcaIds)
-      : { data: [] as { nombre: string; codigo: string }[] };
-    
-    console.log("Clientes cargados:", clientsRes.data?.length || 0);
-    console.log("Marcas cargadas:", brandsRes.data?.length || 0);
-    
-    const clientCodes = new Map<string, string>(clientsRes.data?.map(c => [c.nombre, c.codigo] as [string, string]) || []);
-    const brandCodes = new Map<string, string>(brandsRes.data?.map(b => [b.nombre, b.codigo] as [string, string]) || []);
-    
-    for (const marca of result.resultadosMarcas) {
-      const previousMonth = getPreviousMonth(marca.fechaDestino);
-      const codigoMarca = brandCodes.get(marca.marca);
-      
-      console.log(`Marca: ${marca.marca}, Mes anterior: ${previousMonth}, Código: ${codigoMarca}`);
-      
-      if (!codigoMarca) {
-        console.warn(`No se encontró código para marca: ${marca.marca}`);
-        continue;
-      }
-      
-      // Get unique clients and vendors from this brand
-      for (const distribucion of marca.distribucionClientes) {
-        // distribucion.cliente is already a name from the calculation
-        const clienteNombre = distribucion.cliente;
-        const codigoCliente = clientCodes.get(clienteNombre);
-        const key = `${distribucion.vendedor}-${clienteNombre}-${marca.marca}`;
-        
-        if (!codigoCliente) {
-          console.warn(`No se encontró código para cliente: ${clienteNombre}`);
-          salesByKey[key] = 0;
-          continue;
-        }
-        
-        console.log(`Consultando ventas: mes=${previousMonth}, marca=${codigoMarca}, cliente=${codigoCliente}`);
-        
-        // Query ventas_reales for previous month
-        const { data, error } = await supabase
-          .from('ventas_reales')
-          .select('monto')
-          .eq('mes', previousMonth)
-          .eq('codigo_marca', codigoMarca)
-          .eq('codigo_cliente', codigoCliente);
-        
-        if (error) {
-          console.error("Error consultando ventas_reales:", error);
-        }
-        
-        if (data && data.length > 0) {
-          const total = data.reduce((sum, sale) => sum + Number(sale.monto), 0);
-          salesByKey[key] = total;
-          console.log(`✓ Ventas encontradas para ${key}: $${total}`);
-        } else {
-          salesByKey[key] = 0;
-          console.log(`✗ No se encontraron ventas para ${key}`);
-        }
-      }
-    }
-    
-    console.log("=== RESUMEN VENTAS MES ANTERIOR ===", salesByKey);
-    setPreviousMonthSales(salesByKey);
-  };
-
-  const calculateVendorClientData = () => {
-    const data: VendorClientData[] = [];
-
-    result.resultadosMarcas.forEach((marca) => {
-      const totalBrandAdjustment = brandAdjustments[marca.marca] || 0;
-      
-      // Calculate total brand budget (sum of all subtotals for this brand)
-      const totalBrandBudget = marca.distribucionClientes.reduce((sum, cliente) => 
-        sum + cliente.subtotal, 0
-      );
-
-      marca.distribucionClientes.forEach((cliente) => {
-        const key = `${cliente.vendedor}-${cliente.cliente}-${marca.marca}`;
-        
-        // Use the already calculated subtotal as presupuestoAsignado (Ppto Asociado)
-        // This comes from the formula: Venta Promedio del Artículo × Factor
-        const presupuestoAsignado = cliente.subtotal;
-
-        // Calculate proportional brand adjustment
-        const itemProportion = totalBrandBudget > 0 ? presupuestoAsignado / totalBrandBudget : 0;
-        const ajusteMarca = totalBrandAdjustment * itemProportion;
-
-        data.push({
-          vendedor: cliente.vendedor,
-          cliente: cliente.cliente,
-          empresa: cliente.empresa,
-          marca: marca.marca,
-          presupuestoAsignado,
-          ventasReales: cliente.articulos.reduce((sum, art) => sum + art.ventaReal, 0),
-          ventaMesAnterior: previousMonthSales[key] || 0,
-          ajusteManual: manualAdjustments[key] || 0,
-          ajusteMarca,
-          key,
-        });
-      });
-    });
-
-    setVendorClientData(data);
-  };
-
-  const getUniqueVendors = () => {
-    return Array.from(
-      new Set(
-        result.resultadosMarcas.flatMap((m) =>
-          m.distribucionClientes.map((c) => c.vendedor)
-        )
-      )
+  // Filtrado lógico
+  const filteredResults = useMemo(() => {
+    return result.resultadosMarcas.filter(
+      (res) =>
+        res.marca.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        res.distribucionClientes.some((c) => c.cliente.toLowerCase().includes(searchTerm.toLowerCase())),
     );
-  };
-
-  const handleManualAdjustment = (key: string, value: string) => {
-    const numValue = parseFloat(value) || 0;
-    setManualAdjustments((prev) => ({
-      ...prev,
-      [key]: numValue,
-    }));
-  };
-
-  const handleBrandAdjustment = (marca: string, value: string) => {
-    const numValue = parseFloat(value) || 0;
-    setBrandAdjustments((prev) => {
-      const newAdjustments = {
-        ...prev,
-        [marca]: numValue,
-      };
-      if (onBrandAdjustmentsChange) {
-        onBrandAdjustmentsChange(newAdjustments);
-      }
-      return newAdjustments;
-    });
-  };
-
-  const applyAdjustments = async () => {
-    calculateVendorClientData();
-    
-    // Save brand adjustments to database
-    try {
-      const updates = marcasPresupuesto.map(mp => ({
-        user_id: userId,
-        marca: mp.marca,
-        empresa: mp.empresa,
-        presupuesto: mp.presupuesto,
-        fecha_destino: mp.fechaDestino,
-        vendor_adjustments: { brandAdjustments },
-        role: (userRole as "administrador" | "gerente" | "admin_ventas") || 'administrador',
-      }));
-
-      // First delete existing entries for these brands
-      const marcasToUpdate = [...new Set(updates.map(u => u.marca))];
-      await supabase
-        .from('budgets')
-        .delete()
-        .eq('user_id', userId)
-        .in('marca', marcasToUpdate);
-
-      // Then insert new values
-      const { error } = await supabase.from('budgets').insert(updates);
-
-      if (error) throw error;
-      toast.success("Ajustes guardados exitosamente");
-    } catch (error) {
-      console.error("Error saving brand adjustments:", error);
-      toast.error("Error al guardar ajustes");
-    }
-  };
-
-  const exportToExcel = () => {
-    const exportData = vendorClientData.map((item) => ({
-      Vendedor: item.vendedor,
-      Cliente: item.cliente,
-      Empresa: item.empresa,
-      Marca: item.marca,
-      'Presupuesto Base': item.presupuestoAsignado,
-      'Venta Mes Anterior': item.ventaMesAnterior,
-      'Ventas Reales': item.ventasReales,
-      'Ajuste Manual': item.ajusteManual,
-      'Ajuste Marca': item.ajusteMarca,
-      'Total': item.presupuestoAsignado + item.ajusteManual + item.ajusteMarca,
-    }));
-
-    const worksheet = XLSX.utils.json_to_sheet(exportData);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Vendedores-Clientes');
-    XLSX.writeFile(workbook, `Reporte_Vendedores_Clientes_${new Date().toISOString().split('T')[0]}.xlsx`);
-    toast.success("Reporte exportado exitosamente");
-  };
-
-  const handleVendorChange = (key: string, newVendor: string) => {
-    setEditingVendor({ key, newVendor });
-  };
-
-  const applyVendorChange = () => {
-    if (!editingVendor) return;
-    
-    const updatedData = vendorClientData.map(item => {
-      if (item.key === editingVendor.key) {
-        return { ...item, vendedor: editingVendor.newVendor };
-      }
-      return item;
-    });
-    
-    setVendorClientData(updatedData);
-    setEditingVendor(null);
-    toast.success("Vendedor actualizado exitosamente");
-  };
-
-  const uniqueVendors = getUniqueVendors();
-  const canEdit = userRole === "admin_ventas" || userRole === "administrador";
-  const isReadOnly = userRole === "gerente";
-
-  const vendorTotals = vendorClientData.reduce((acc, item) => {
-    const current = acc[item.vendedor] || 0;
-    acc[item.vendedor] = current + item.presupuestoAsignado + item.ajusteManual + item.ajusteMarca;
-    return acc;
-  }, {} as Record<string, number>);
-
-  const brandTotals = vendorClientData.reduce((acc, item) => {
-    const current = acc[item.marca] || 0;
-    acc[item.marca] = current + item.presupuestoAsignado + item.ajusteManual + item.ajusteMarca;
-    return acc;
-  }, {} as Record<string, number>);
-
-  const grandTotal = Object.values(vendorTotals).reduce((sum, val) => sum + val, 0);
+  }, [result, searchTerm]);
 
   return (
-    <Card className="p-6">
-      <div className="mb-4 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Users className="h-5 w-5 text-primary" />
-          <h3 className="text-lg font-semibold">Vendedores y Clientes</h3>
-          {isReadOnly && (
-            <span className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded">Solo lectura</span>
-          )}
+    <div className="space-y-6">
+      {/* 1. Buscador Rápido */}
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Input
+          placeholder="Buscar marca o cliente..."
+          className="pl-10"
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+        />
+      </div>
+
+      {/* 2. Resumen de KPIs de la Tabla */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="bg-primary/5 p-4 rounded-lg border border-primary/10 flex items-center gap-3">
+          <div className="p-2 bg-primary/10 rounded-full">
+            <DollarSign className="text-primary h-5 w-5" />
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground uppercase font-bold">Total Presupuesto</p>
+            <p className="text-xl font-bold">${result.totalPresupuesto.toLocaleString()}</p>
+          </div>
         </div>
-        <div className="flex gap-2">
-          <Button onClick={exportToExcel} size="sm" variant="outline">
-            <Download className="h-4 w-4 mr-2" />
-            Exportar Excel
-          </Button>
-          {editingVendor && canEdit && (
-            <Button onClick={applyVendorChange} size="sm" variant="default">
-              Confirmar Cambio
-            </Button>
-          )}
-          {!isReadOnly && (
-            <Button onClick={applyAdjustments} size="sm">
-              Aplicar Ajustes
-            </Button>
-          )}
+        <div className="bg-blue-500/5 p-4 rounded-lg border border-blue-500/10 flex items-center gap-3">
+          <div className="p-2 bg-blue-500/10 rounded-full">
+            <Users className="text-blue-500 h-5 w-5" />
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground uppercase font-bold">Marcas Activas</p>
+            <p className="text-xl font-bold">{result.resultadosMarcas.length}</p>
+          </div>
+        </div>
+        <div className="bg-green-500/5 p-4 rounded-lg border border-green-500/10 flex items-center gap-3">
+          <div className="p-2 bg-green-500/10 rounded-full">
+            <TrendingUp className="text-green-500 h-5 w-5" />
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground uppercase font-bold">Crecimiento Promedio</p>
+            <p className="text-xl font-bold">{result.resultadosMarcas[0]?.porcentajeCambio.toFixed(1)}%</p>
+          </div>
         </div>
       </div>
 
-      <div className="overflow-x-auto rounded-md border">
+      {/* 3. Tabla Jerárquica */}
+      <div className="rounded-md border bg-card">
         <Table>
-          <TableHeader>
+          <TableHeader className="bg-muted/50">
             <TableRow>
+              <TableHead className="w-[30px]"></TableHead>
+              <TableHead>Marca / Cliente</TableHead>
               <TableHead>Vendedor</TableHead>
-              <TableHead>Cliente</TableHead>
-              <TableHead>Empresa</TableHead>
-              <TableHead>Marca</TableHead>
-              <TableHead className="text-right">Presupuesto Base</TableHead>
-              <TableHead className="text-right">Venta Mes Anterior</TableHead>
-              <TableHead className="text-right">Ventas Reales</TableHead>
-              <TableHead className="text-right">Ajuste Manual</TableHead>
-              <TableHead className="text-right">Ajuste Marca</TableHead>
-              <TableHead className="text-right">Total</TableHead>
+              <TableHead className="text-right">Venta Ref. Promedio</TableHead>
+              <TableHead className="w-[200px]">Distribución Presupuesto</TableHead>
+              <TableHead className="text-right font-bold">Presupuesto Sugerido</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {vendorClientData.map((item, index) => {
-              const key = `${item.vendedor}-${item.cliente}-${item.marca}`;
-              const total = item.presupuestoAsignado + item.ajusteManual + item.ajusteMarca;
-
-              return (
-                <TableRow key={index}>
-                  <TableCell className="font-medium">
-                    {canEdit ? (
-                      <select
-                        value={editingVendor?.key === key ? editingVendor.newVendor : item.vendedor}
-                        onChange={(e) => handleVendorChange(key, e.target.value)}
-                        className="w-full rounded border border-input bg-background px-2 py-1 text-sm"
-                      >
-                        {uniqueVendors.map(v => (
-                          <option key={v} value={v}>{v}</option>
-                        ))}
-                      </select>
+            {filteredResults.map((res) => (
+              <React.Fragment key={res.marca}>
+                {/* Fila Padre: Marca */}
+                <TableRow
+                  className="cursor-pointer hover:bg-muted/30 transition-colors"
+                  onClick={() => toggleBrand(res.marca)}
+                >
+                  <TableCell>
+                    {expandedBrands[res.marca] ? (
+                      <ChevronDown className="h-4 w-4" />
                     ) : (
-                      item.vendedor
+                      <ChevronRight className="h-4 w-4" />
                     )}
                   </TableCell>
-                  <TableCell>{item.cliente}</TableCell>
-                  <TableCell>{item.empresa}</TableCell>
-                  <TableCell>{item.marca}</TableCell>
-                  <TableCell className="text-right">
-                    ${item.presupuestoAsignado.toLocaleString("es-ES", {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    })}
+                  <TableCell className="font-bold text-primary">{res.marca}</TableCell>
+                  <TableCell className="text-muted-foreground italic">Varios</TableCell>
+                  <TableCell className="text-right">${res.promedioVentaMesesReferencia.toLocaleString()}</TableCell>
+                  <TableCell>
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-[10px] uppercase font-medium">
+                        <span>vs Real</span>
+                        <span>
+                          {res.porcentajeCambio > 0 ? "+" : ""}
+                          {res.porcentajeCambio.toFixed(1)}%
+                        </span>
+                      </div>
+                      <Progress value={Math.min(res.porcentajeCambio + 50, 100)} className="h-1.5" />
+                    </div>
                   </TableCell>
-                  <TableCell className="text-right">
-                    ${item.ventaMesAnterior.toLocaleString("es-ES", {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    })}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    ${item.ventasReales.toLocaleString("es-ES", {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    })}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    {!isReadOnly ? (
-                      <Input
-                        type="number"
-                        step="0.01"
-                        value={manualAdjustments[key] || 0}
-                        onChange={(e) => handleManualAdjustment(key, e.target.value)}
-                        className="w-32 text-right"
-                      />
-                    ) : (
-                      <span>${(manualAdjustments[key] || 0).toLocaleString("es-ES", {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2,
-                      })}</span>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    ${item.ajusteMarca.toLocaleString("es-ES", {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    })}
-                  </TableCell>
-                  <TableCell className="text-right font-semibold">
-                    ${total.toLocaleString("es-ES", {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    })}
-                  </TableCell>
+                  <TableCell className="text-right font-bold text-lg">${res.presupuesto.toLocaleString()}</TableCell>
                 </TableRow>
-              );
-            })}
+
+                {/* Filas Hijas: Clientes (solo si está expandido) */}
+                {expandedBrands[res.marca] &&
+                  res.distribucionClientes.map((cli, idx) => (
+                    <TableRow
+                      key={`${res.marca}-${cli.cliente}-${idx}`}
+                      className="bg-muted/10 border-l-4 border-l-primary/30"
+                    >
+                      <TableCell></TableCell>
+                      <TableCell className="pl-8 text-sm">
+                        <span className="text-muted-foreground mr-2">↳</span>
+                        {cli.cliente}
+                      </TableCell>
+                      <TableCell className="text-sm">{cli.vendedor}</TableCell>
+                      <TableCell className="text-right text-sm">
+                        ${cli.articulos.reduce((sum, a) => sum + a.ventaReal, 0).toLocaleString()}
+                      </TableCell>
+                      <TableCell>
+                        {/* Mini barra de participación del cliente en la marca */}
+                        <Progress value={(cli.subtotal / res.presupuesto) * 100} className="h-1 bg-primary/10" />
+                      </TableCell>
+                      <TableCell className="text-right text-sm font-medium">${cli.subtotal.toLocaleString()}</TableCell>
+                    </TableRow>
+                  ))}
+              </React.Fragment>
+            ))}
           </TableBody>
         </Table>
       </div>
-
-      {/* Brand Adjustments */}
-      {!isReadOnly && (
-        <div className="mt-6 space-y-3 rounded-lg bg-primary/5 border border-primary/20 p-4">
-          <div className="flex items-center gap-2 text-sm font-semibold text-primary">
-            <DollarSign className="h-4 w-4" />
-            <span>Ajustes por Marca (redistribuye proporcionalmente):</span>
-          </div>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {Object.keys(brandTotals).map((marca) => (
-              <div key={marca} className="flex items-center gap-2">
-                <Label className="text-xs font-medium min-w-[80px]">{marca}:</Label>
-                <Input
-                  type="number"
-                  step="0.01"
-                  value={brandAdjustments[marca] || 0}
-                  onChange={(e) => handleBrandAdjustment(marca, e.target.value)}
-                  className="h-8 text-sm"
-                  placeholder="0.00"
-                />
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Vendor Totals */}
-      <div className="mt-6 space-y-2 rounded-lg bg-muted/50 p-4">
-        <div className="flex items-center gap-2 text-sm font-semibold">
-          <DollarSign className="h-4 w-4" />
-          <span>Totales por Vendedor:</span>
-        </div>
-        {Object.entries(vendorTotals).map(([vendedor, total]) => (
-          <div key={vendedor} className="flex justify-between text-sm">
-            <span>{vendedor}:</span>
-            <span className="font-semibold">
-              ${total.toLocaleString("es-ES", {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2,
-              })}
-            </span>
-          </div>
-        ))}
-        <div className="mt-3 flex justify-between border-t pt-3 text-base font-bold">
-          <span>Total General:</span>
-          <span>
-            ${grandTotal.toLocaleString("es-ES", {
-              minimumFractionDigits: 2,
-              maximumFractionDigits: 2,
-            })}
-          </span>
-        </div>
-      </div>
-    </Card>
+    </div>
   );
 };
