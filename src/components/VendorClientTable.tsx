@@ -15,10 +15,21 @@ interface VendorClientTableProps {
   vendorAdjustments: Record<string, { value: number; type: "percentage" | "currency" }>;
   presupuestoTotal: number;
   userRole: string | null;
-  // Añadimos las propiedades que TypeScript reclama:
   marcasPresupuesto: any[];
   userId: string;
   onBrandAdjustmentsChange: (adjustments: Record<string, number>) => void;
+}
+interface VendorClientData {
+  vendedor: string;
+  cliente: string;
+  empresa: string;
+  marca: string;
+  presupuestoAsignado: number;
+  ventasReales: number;
+  ventaMesAnterior: number;
+  ajusteManual: number;
+  ajusteMarca: number;
+  key: string;
 }
 
 export const VendorClientTable = ({
@@ -26,7 +37,7 @@ export const VendorClientTable = ({
   vendorAdjustments,
   presupuestoTotal,
   userRole,
-  marcasPresupuesto, // Las recibimos aunque no las usemos en la versión visual
+  marcasPresupuesto,
   userId,
   onBrandAdjustmentsChange,
 }: VendorClientTableProps) => {
