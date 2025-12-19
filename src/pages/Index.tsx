@@ -20,7 +20,6 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuthSession } from "@/hooks/useAuthSession";
 
-
 // Datos de ejemplo simulados - Ventas por marca, cliente, artículo, vendedor, empresa y mes-año
 const MOCK_DATA = {
   marcas: ["Nike", "Adidas", "Puma", "Reebok", "New Balance"],
@@ -32,7 +31,7 @@ const MOCK_DATA = {
     Adidas: ["Adidas Ultraboost", "Adidas NMD", "Adidas Superstar"],
     Puma: ["Puma Suede", "Puma RS-X", "Puma Clyde"],
     Reebok: ["Reebok Classic", "Reebok Nano", "Reebok Zig"],
-    "New Balance": ["New Balance 574", "New Balance 990", "New Balance 327"]
+    "New Balance": ["New Balance 574", "New Balance 990", "New Balance 327"],
   } as Record<string, string[]>,
   ventas: [] as Array<{
     mesAnio: string;
@@ -42,7 +41,7 @@ const MOCK_DATA = {
     vendedor: string;
     empresa: string;
     venta: number;
-  }>
+  }>,
 };
 const generarMesesAnio = () => {
   const meses = [];
@@ -50,7 +49,7 @@ const generarMesesAnio = () => {
   for (let i = 0; i < 24; i++) {
     const fecha = new Date(hoy.getFullYear(), hoy.getMonth() - i, 1);
     const mes = fecha.toLocaleString("es-ES", {
-      month: "long"
+      month: "long",
     });
     const anio = fecha.getFullYear();
     meses.push(`${mes}-${anio}`);
@@ -60,12 +59,12 @@ const generarMesesAnio = () => {
 const mesesDisponibles = generarMesesAnio();
 
 // Generar datos de ventas para los últimos 24 meses (excepto New Balance que no tiene ventas)
-mesesDisponibles.forEach(mesAnio => {
-  MOCK_DATA.marcas.forEach(marca => {
+mesesDisponibles.forEach((mesAnio) => {
+  MOCK_DATA.marcas.forEach((marca) => {
     // New Balance no tiene ventas (para demostrar Error 3)
     if (marca === "New Balance") return;
-    MOCK_DATA.clientes.forEach(cliente => {
-      MOCK_DATA.articulos[marca]?.forEach(articulo => {
+    MOCK_DATA.clientes.forEach((cliente) => {
+      MOCK_DATA.articulos[marca]?.forEach((articulo) => {
         const vendedor = MOCK_DATA.vendedores[Math.floor(Math.random() * MOCK_DATA.vendedores.length)];
         const empresa = MOCK_DATA.empresas[Math.floor(Math.random() * MOCK_DATA.empresas.length)];
         MOCK_DATA.ventas.push({
@@ -75,7 +74,7 @@ mesesDisponibles.forEach(mesAnio => {
           articulo,
           vendedor,
           empresa,
-          venta: Math.random() * 10000 + 5000
+          venta: Math.random() * 10000 + 5000,
         });
       });
     });
@@ -128,30 +127,40 @@ const Index = () => {
   const [result, setResult] = useState<CalculationResult | null>(null);
   const [marcasPresupuesto, setMarcasPresupuesto] = useState<MarcaPresupuesto[]>([]);
 
-  const [vendorAdjustments, setVendorAdjustments] = useState<Record<string, {
-    value: number;
-    type: "percentage" | "currency";
-  }>>({});
+  const [vendorAdjustments, setVendorAdjustments] = useState<
+    Record<
+      string,
+      {
+        amount: number;
+        percentage: number;
+        fixedField: "amount" | "percentage" | null;
+      }
+    >
+  >({});
   const [brandAdjustments, setBrandAdjustments] = useState<Record<string, number>>({});
-  const [allHistoricalBudgets, setAllHistoricalBudgets] = useState<Array<{
-    marca: string;
-    empresa: string;
-    presupuesto: number;
-    fechaDestino: string;
-  }>>([]);
-  
+  const [allHistoricalBudgets, setAllHistoricalBudgets] = useState<
+    Array<{
+      marca: string;
+      empresa: string;
+      presupuesto: number;
+      fechaDestino: string;
+    }>
+  >([]);
+
   // Real data from Supabase
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [clientes, setClientes] = useState<Array<{ codigo: string; nombre: string }>>([]);
   const [marcas, setMarcas] = useState<Array<{ codigo: string; nombre: string }>>([]);
   const [vendedores, setVendedores] = useState<Array<{ codigo: string; nombre: string }>>([]);
-  const [ventas, setVentas] = useState<Array<{
-    mes: string;
-    codigo_marca: string;
-    codigo_cliente: string;
-    codigo_vendedor: string | null;
-    monto: number;
-  }>>([]);
+  const [ventas, setVentas] = useState<
+    Array<{
+      mes: string;
+      codigo_marca: string;
+      codigo_cliente: string;
+      codigo_vendedor: string | null;
+      monto: number;
+    }>
+  >([]);
   useEffect(() => {
     if (!authLoading && !session) {
       navigate("/auth");
@@ -170,7 +179,7 @@ const Index = () => {
     const fetchAllFromPerRole = async (
       table: "marcas_per_role" | "clientes_per_role" | "vendedores_per_role",
       idColumn: string,
-      roleId: string | undefined
+      roleId: string | undefined,
     ) => {
       if (!roleId) return [];
       const allIds: string[] = [];
@@ -191,19 +200,13 @@ const Index = () => {
       return allIds;
     };
 
-    const fetchByIds = async (
-      table: "clientes" | "marcas" | "vendedores",
-      ids: string[]
-    ) => {
+    const fetchByIds = async (table: "clientes" | "marcas" | "vendedores", ids: string[]) => {
       if (ids.length === 0) return [];
       const allData: { codigo: string; nombre: string }[] = [];
       const batchSize = 500;
       for (let i = 0; i < ids.length; i += batchSize) {
         const batch = ids.slice(i, i + batchSize);
-        const { data, error } = await supabase
-          .from(table)
-          .select("codigo, nombre")
-          .in("id", batch);
+        const { data, error } = await supabase.from(table).select("codigo, nombre").in("id", batch);
         if (error) throw error;
         if (data) allData.push(...data);
       }
@@ -259,25 +262,20 @@ const Index = () => {
       // 3) Cargar maestros filtrados por permisos del rol
       const userRoleId = roleData?.role_id;
 
-      const [allowedMarcaIds, allowedClienteIds, allowedVendedorIds] =
-        await Promise.all([
-          fetchAllFromPerRole("marcas_per_role", "marca_id", userRoleId),
-          fetchAllFromPerRole("clientes_per_role", "cliente_id", userRoleId),
-          fetchAllFromPerRole("vendedores_per_role", "vendedor_id", userRoleId),
-        ]);
+      const [allowedMarcaIds, allowedClienteIds, allowedVendedorIds] = await Promise.all([
+        fetchAllFromPerRole("marcas_per_role", "marca_id", userRoleId),
+        fetchAllFromPerRole("clientes_per_role", "cliente_id", userRoleId),
+        fetchAllFromPerRole("vendedores_per_role", "vendedor_id", userRoleId),
+      ]);
 
       if (cancelled) return;
 
-      const [clientesData, marcasData, vendedoresData, ventasRes] =
-        await Promise.all([
-          fetchByIds("clientes", allowedClienteIds),
-          fetchByIds("marcas", allowedMarcaIds),
-          fetchByIds("vendedores", allowedVendedorIds),
-          supabase
-            .from("ventas_reales")
-            .select("mes, codigo_marca, codigo_cliente, codigo_vendedor, monto")
-            .limit(50000),
-        ]);
+      const [clientesData, marcasData, vendedoresData, ventasRes] = await Promise.all([
+        fetchByIds("clientes", allowedClienteIds),
+        fetchByIds("marcas", allowedMarcaIds),
+        fetchByIds("vendedores", allowedVendedorIds),
+        supabase.from("ventas_reales").select("mes, codigo_marca, codigo_cliente, codigo_vendedor, monto").limit(50000),
+      ]);
 
       if (cancelled) return;
 
@@ -315,101 +313,154 @@ const Index = () => {
       toast.error("No se pudo cerrar sesión");
     }
   };
+
+  // Función de distribución proporcional por historial de ventas
+  const distributeProportionallyByHistory = (
+    vendedor: string,
+    presupuestoVendedor: number,
+    ventasTransformadas: Array<{
+      mesAnio: string;
+      marca: string;
+      cliente: string;
+      articulo: string;
+      vendedor: string;
+      empresa: string;
+      venta: number;
+    }>,
+    mesesReferencia: string[],
+  ) => {
+    // 1. Filtrar ventas del vendedor en meses de referencia
+    const ventasDelVendedor = ventasTransformadas.filter(
+      (v) => v.vendedor === vendedor && mesesReferencia.includes(v.mesAnio),
+    );
+
+    // 2. Agrupar por cliente y sumar ventas
+    const ventasPorCliente = new Map<string, number>();
+    ventasDelVendedor.forEach((venta) => {
+      const actual = ventasPorCliente.get(venta.cliente) || 0;
+      ventasPorCliente.set(venta.cliente, actual + venta.venta);
+    });
+
+    // 3. Calcular total de ventas del vendedor
+    const totalVentasVendedor = Array.from(ventasPorCliente.values()).reduce((sum, v) => sum + v, 0);
+
+    // 4. Si no hay ventas, retornar array vacío
+    if (totalVentasVendedor === 0) {
+      return [];
+    }
+
+    // 5. Distribuir presupuesto proporcionalmente
+    const distribucion: Array<{
+      cliente: string;
+      presupuesto: number;
+      porcentajeHistorico: number;
+      ventaHistorica: number;
+    }> = [];
+
+    ventasPorCliente.forEach((ventasCliente, cliente) => {
+      const porcentaje = ventasCliente / totalVentasVendedor;
+      const presupuestoCliente = presupuestoVendedor * porcentaje;
+      distribucion.push({
+        cliente,
+        presupuesto: presupuestoCliente,
+        porcentajeHistorico: porcentaje * 100,
+        ventaHistorica: ventasCliente,
+      });
+    });
+
+    return distribucion;
+  };
   const handleCalculate = (marcasPresupuesto: MarcaPresupuesto[], mesesReferencia: string[]) => {
-    console.log('🎯 Iniciando cálculo con:', { 
-      marcasCount: marcasPresupuesto.length, 
+    console.log("🎯 Iniciando cálculo con:", {
+      marcasCount: marcasPresupuesto.length,
       mesesReferencia,
       ventasCount: ventas.length,
-      marcasDBCount: marcas.length
+      marcasDBCount: marcas.length,
     });
-    
+
     const resultadosMarcas: CalculationResult["resultadosMarcas"] = [];
     const errores: CalculationResult["errores"] = [];
     let totalPresupuestoGeneral = 0;
     let totalPromedioReferenciaGeneral = 0;
-    
+
     // Create a map for quick lookups
-    const marcasMap = new Map(marcas.map(m => [m.codigo, m.nombre]));
-    const clientesMap = new Map(clientes.map(c => [c.codigo, c.nombre]));
-    const vendedoresMap = new Map(vendedores.map(v => [v.codigo, v.nombre]));
-    
+    const marcasMap = new Map(marcas.map((m) => [m.codigo, m.nombre]));
+    const clientesMap = new Map(clientes.map((c) => [c.codigo, c.nombre]));
+    const vendedoresMap = new Map(vendedores.map((v) => [v.codigo, v.nombre]));
+
     // Transform ventas to have mesAnio in correct format
-    const ventasTransformadas = ventas.map(v => {
+    const ventasTransformadas = ventas.map((v) => {
       let mesAnio = v.mes;
-      
+
       // Convert database format to "mes-YYYY" format
       if (v.mes.match(/^\d{4}-\d{2}$/)) {
-        const [year, month] = v.mes.split('-');
+        const [year, month] = v.mes.split("-");
         const date = new Date(parseInt(year), parseInt(month) - 1, 1);
         const mes = date.toLocaleString("es-ES", { month: "long" });
         mesAnio = `${mes}-${year}`;
       } else if (v.mes.match(/^\d{4}\/\d{2}\/\d{2}$/)) {
         // Handle YYYY/MM/DD format
-        const [year, month] = v.mes.split('/');
+        const [year, month] = v.mes.split("/");
         const date = new Date(parseInt(year), parseInt(month) - 1, 1);
         const mes = date.toLocaleString("es-ES", { month: "long" });
         mesAnio = `${mes}-${year}`;
       }
-      
+
       return {
         ...v,
-        mesAnio
+        mesAnio,
       };
     });
-    
-    console.log('📊 Ventas transformadas (muestra):', ventasTransformadas.slice(0, 3));
-    console.log('📊 Meses disponibles en ventas:', [...new Set(ventasTransformadas.map(v => v.mesAnio))]);
-    
-    marcasPresupuesto.forEach(marcaPresupuesto => {
-      const {
-        marca,
-        fechaDestino,
-        empresa,
-        presupuesto
-      } = marcaPresupuesto;
 
-      console.log('🔍 Procesando marca:', marca);
+    console.log("📊 Ventas transformadas (muestra):", ventasTransformadas.slice(0, 3));
+    console.log("📊 Meses disponibles en ventas:", [...new Set(ventasTransformadas.map((v) => v.mesAnio))]);
+
+    marcasPresupuesto.forEach((marcaPresupuesto) => {
+      const { marca, fechaDestino, empresa, presupuesto } = marcaPresupuesto;
+
+      console.log("🔍 Procesando marca:", marca);
 
       // Find marca codigo from nombre (case-insensitive)
-      const marcaCodigo = Array.from(marcasMap.entries()).find(([_, nombre]) => 
-        nombre.toLowerCase().trim() === marca.toLowerCase().trim()
+      const marcaCodigo = Array.from(marcasMap.entries()).find(
+        ([_, nombre]) => nombre.toLowerCase().trim() === marca.toLowerCase().trim(),
       )?.[0];
-      
-      console.log('🔍 Código encontrado para', marca, ':', marcaCodigo);
-      
+
+      console.log("🔍 Código encontrado para", marca, ":", marcaCodigo);
+
       // Validación Error 1: Marca no existe
       if (!marcaCodigo) {
-        console.error('❌ Marca no encontrada en BD:', marca);
-        console.log('📋 Marcas disponibles:', Array.from(marcasMap.values()));
+        console.error("❌ Marca no encontrada en BD:", marca);
+        console.log("📋 Marcas disponibles:", Array.from(marcasMap.values()));
         errores.push({
           tipo: 1,
           marca,
           fechaDestino,
           empresa,
-          mensaje: `La marca "${marca}" no existe en el maestro de marcas`
+          mensaje: `La marca "${marca}" no existe en el maestro de marcas`,
         });
         return;
       }
 
       // Obtener ventas de los meses de referencia para esta marca usando ventas transformadas
-      const ventasMesesReferencia = ventasTransformadas.filter(v => 
-        mesesReferencia.includes(v.mesAnio) && v.codigo_marca === marcaCodigo
+      const ventasMesesReferencia = ventasTransformadas.filter(
+        (v) => mesesReferencia.includes(v.mesAnio) && v.codigo_marca === marcaCodigo,
       );
-      
-      console.log('📊 Ventas encontradas para', marca, ':', ventasMesesReferencia.length);
+
+      console.log("📊 Ventas encontradas para", marca, ":", ventasMesesReferencia.length);
 
       // Validación Error 4: Marca sin ventas en meses de referencia
       if (ventasMesesReferencia.length === 0) {
-        console.error('❌ No hay ventas para', marca, 'en meses:', mesesReferencia);
-        console.log('📊 Ventas de esta marca en otros meses:', 
-          ventasTransformadas.filter(v => v.codigo_marca === marcaCodigo).map(v => v.mesAnio)
+        console.error("❌ No hay ventas para", marca, "en meses:", mesesReferencia);
+        console.log(
+          "📊 Ventas de esta marca en otros meses:",
+          ventasTransformadas.filter((v) => v.codigo_marca === marcaCodigo).map((v) => v.mesAnio),
         );
         errores.push({
           tipo: 4,
           marca,
           fechaDestino,
           empresa,
-          mensaje: `La marca "${marca}" de la empresa "${empresa}" no tiene ventas en los meses de referencia seleccionados`
+          mensaje: `La marca "${marca}" de la empresa "${empresa}" no tiene ventas en los meses de referencia seleccionados`,
         });
         return;
       }
@@ -417,18 +468,18 @@ const Index = () => {
       // Calcular promedio de ventas para esta marca
       const sumaVentas = ventasMesesReferencia.reduce((sum, v) => sum + v.monto, 0);
       const promedioVentaMarca = sumaVentas / mesesReferencia.length;
-      
-      console.log('💰 Promedio de venta para', marca, ':', promedioVentaMarca);
+
+      console.log("💰 Promedio de venta para", marca, ":", promedioVentaMarca);
 
       // Validación Error 3: Marca sin ventas para distribuir
       if (promedioVentaMarca === 0) {
-        console.error('❌ Promedio de venta es 0 para', marca);
+        console.error("❌ Promedio de venta es 0 para", marca);
         errores.push({
           tipo: 3,
           marca,
           fechaDestino,
           empresa,
-          mensaje: `Falta de venta para distribución del presupuesto de la marca "${marca}" en la empresa "${empresa}"`
+          mensaje: `Falta de venta para distribución del presupuesto de la marca "${marca}" en la empresa "${empresa}"`,
         });
         return;
       }
@@ -436,50 +487,50 @@ const Index = () => {
       // Calcular factor de ajuste a nivel de marca
       const factorMarca = presupuesto / promedioVentaMarca;
       const porcentajeCambio = (factorMarca - 1) * 100;
-      
-      console.log('📈 Factor y % cambio para', marca, ':', { factorMarca, porcentajeCambio });
+
+      console.log("📈 Factor y % cambio para", marca, ":", { factorMarca, porcentajeCambio });
 
       // Agrupar ventas por cliente para esta marca
-      const ventasPorCliente = new Map<string, {
-        cliente: string;
-        vendedor: string;
-        ventas: Array<{mes: string; monto: number}>;
-      }>();
-      ventasMesesReferencia.forEach(venta => {
+      const ventasPorCliente = new Map<
+        string,
+        {
+          cliente: string;
+          vendedor: string;
+          ventas: Array<{ mes: string; monto: number }>;
+        }
+      >();
+      ventasMesesReferencia.forEach((venta) => {
         // Always use client name, never fallback to code
         const clienteNombre = clientesMap.get(venta.codigo_cliente);
-        
+
         // Skip if client name not found (data integrity issue)
         if (!clienteNombre) {
           console.warn(`Cliente no encontrado para código: ${venta.codigo_cliente}`);
           return;
         }
-        
-        const vendedorNombre = venta.codigo_vendedor 
-          ? (vendedoresMap.get(venta.codigo_vendedor) || 'Sin vendedor') 
-          : 'Sin vendedor';
-        
+
+        const vendedorNombre = venta.codigo_vendedor
+          ? vendedoresMap.get(venta.codigo_vendedor) || "Sin vendedor"
+          : "Sin vendedor";
+
         if (!ventasPorCliente.has(clienteNombre)) {
           ventasPorCliente.set(clienteNombre, {
             cliente: clienteNombre,
             vendedor: vendedorNombre,
-            ventas: []
+            ventas: [],
           });
         }
         ventasPorCliente.get(clienteNombre)!.ventas.push({
           mes: venta.mesAnio,
-          monto: venta.monto
+          monto: venta.monto,
         });
       });
-      
-      console.log('👥 Clientes encontrados para', marca, ':', ventasPorCliente.size);
+
+      console.log("👥 Clientes encontrados para", marca, ":", ventasPorCliente.size);
 
       const distribucionClientes: CalculationResult["resultadosMarcas"][0]["distribucionClientes"] = [];
-      ventasPorCliente.forEach(clienteData => {
-        const {
-          cliente,
-          vendedor
-        } = clienteData;
+      ventasPorCliente.forEach((clienteData) => {
+        const { cliente, vendedor } = clienteData;
 
         // Calcular promedio de ventas para este cliente
         const sumaVentasCliente = clienteData.ventas.reduce((sum, v) => sum + v.monto, 0);
@@ -493,13 +544,15 @@ const Index = () => {
           cliente,
           vendedor,
           empresa: empresa,
-          articulos: [{
-            articulo: marca, // Use marca as article name for now
-            ventaReal: promedioVentaCliente,
-            ventaAjustada: presupuestoAjustadoCliente,
-            variacion: presupuestoAjustadoCliente - promedioVentaCliente
-          }],
-          subtotal: presupuestoAjustadoCliente
+          articulos: [
+            {
+              articulo: marca, // Use marca as article name for now
+              ventaReal: promedioVentaCliente,
+              ventaAjustada: presupuestoAjustadoCliente,
+              variacion: presupuestoAjustadoCliente - promedioVentaCliente,
+            },
+          ],
+          subtotal: presupuestoAjustadoCliente,
         });
       });
       resultadosMarcas.push({
@@ -509,71 +562,78 @@ const Index = () => {
         presupuesto,
         promedioVentaMesesReferencia: promedioVentaMarca,
         porcentajeCambio,
-        distribucionClientes
+        distribucionClientes,
       });
       totalPresupuestoGeneral += presupuesto;
       totalPromedioReferenciaGeneral += promedioVentaMarca;
     });
 
-    console.log('✅ Cálculo completado:', {
+    console.log("✅ Cálculo completado:", {
       marcasCalculadas: resultadosMarcas.length,
       errores: errores.length,
-      totalPresupuesto: totalPresupuestoGeneral
+      totalPresupuesto: totalPresupuestoGeneral,
     });
-    
+
     if (errores.length > 0) {
-      console.error('❌ Errores encontrados:', errores);
+      console.error("❌ Errores encontrados:", errores);
     }
 
     // Store historical budget data for suggestions in database
-    const historicalBudgets = marcasPresupuesto.map(mp => ({
+    const historicalBudgets = marcasPresupuesto.map((mp) => ({
       marca: mp.marca,
       empresa: mp.empresa,
       presupuesto: mp.presupuesto,
-      fechaDestino: mp.fechaDestino
+      fechaDestino: mp.fechaDestino,
     }));
-    setAllHistoricalBudgets(prev => [...prev, ...historicalBudgets]);
+    setAllHistoricalBudgets((prev) => [...prev, ...historicalBudgets]);
 
     // Save budgets to database for future suggestions
     if (user) {
-      const budgetsToInsert = marcasPresupuesto.map(mp => ({
+      const budgetsToInsert = marcasPresupuesto.map((mp) => ({
         user_id: user.id,
         marca: mp.marca,
         empresa: mp.empresa,
         presupuesto: mp.presupuesto,
         fecha_destino: mp.fechaDestino,
-        role: userRole as "administrador" | "gerente" | "admin_ventas" || 'administrador'
+        role: (userRole as "administrador" | "gerente" | "admin_ventas") || "administrador",
       }));
-      supabase.from('budgets').insert(budgetsToInsert).then(({
-        error
-      }) => {
-        if (error) {
-          console.error('Error saving budgets:', error);
-        } else {
-          console.log('Budgets saved successfully');
-        }
-      });
+      supabase
+        .from("budgets")
+        .insert(budgetsToInsert)
+        .then(({ error }) => {
+          if (error) {
+            console.error("Error saving budgets:", error);
+          } else {
+            console.log("Budgets saved successfully");
+          }
+        });
     }
     const resultadoFinal: CalculationResult = {
       totalPresupuesto: totalPresupuestoGeneral,
       promedioVentaReferencia: totalPromedioReferenciaGeneral / Math.max(resultadosMarcas.length, 1),
       resultadosMarcas,
-      errores
+      errores,
     };
 
     // Mostrar errores si existen
     if (errores.length > 0) {
-      errores.forEach(error => {
+      errores.forEach((error) => {
         toast.error(`Error ${error.tipo}: ${error.mensaje}`);
       });
     }
 
     // Mostrar promedio de ventas de referencia
     const promedioTotal = resultadosMarcas.reduce((sum, r) => sum + r.promedioVentaMesesReferencia, 0);
-    const promedioMensaje = resultadosMarcas.length > 0 ? `Promedio de venta en meses de referencia: $${(promedioTotal / resultadosMarcas.length).toLocaleString("es-ES", {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2
-    })}` : "No se calcularon marcas";
+    const promedioMensaje =
+      resultadosMarcas.length > 0
+        ? `Promedio de venta en meses de referencia: $${(promedioTotal / resultadosMarcas.length).toLocaleString(
+            "es-ES",
+            {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2,
+            },
+          )}`
+        : "No se calcularon marcas";
     toast.info(promedioMensaje);
     setResult(resultadoFinal);
   };
@@ -581,25 +641,33 @@ const Index = () => {
     return null;
   }
   const activeRole = simulatedRole || userRole;
-  const vendedoresUnicos = Array.from(new Set(result?.resultadosMarcas.flatMap(m => m.distribucionClientes.map(c => c.vendedor)) || []));
-  const availableRoles = [{
-    value: "administrador",
-    label: "Administrador"
-  }, {
-    value: "gerente",
-    label: "Gerente"
-  }, {
-    value: "admin_ventas",
-    label: "Admin. Ventas"
-  }, {
-    value: "vendedor",
-    label: "Vendedor"
-  }];
+  const vendedoresUnicos = Array.from(
+    new Set(result?.resultadosMarcas.flatMap((m) => m.distribucionClientes.map((c) => c.vendedor)) || []),
+  );
+  const availableRoles = [
+    {
+      value: "administrador",
+      label: "Administrador",
+    },
+    {
+      value: "gerente",
+      label: "Gerente",
+    },
+    {
+      value: "admin_ventas",
+      label: "Admin. Ventas",
+    },
+    {
+      value: "vendedor",
+      label: "Vendedor",
+    },
+  ];
   const handleRoleChange = (newRole: string) => {
     setSimulatedRole(newRole);
-    toast.info(`Vista cambiada a: ${availableRoles.find(r => r.value === newRole)?.label}`);
+    toast.info(`Vista cambiada a: ${availableRoles.find((r) => r.value === newRole)?.label}`);
   };
-  return <div className="min-h-screen bg-background">
+  return (
+    <div className="min-h-screen bg-background">
       <header className="border-b border-border bg-card shadow-sm">
         <div className="container mx-auto px-4 py-6">
           <div className="flex items-center justify-between">
@@ -609,57 +677,53 @@ const Index = () => {
               </div>
               <div>
                 <h1 className="text-2xl font-bold text-foreground">Sistema de Cálculo de Presupuestos y Meta</h1>
-                <p className="text-sm text-muted-foreground">
-                  Análisis dinámico basado en datos históricos de ventas
-                </p>
+                <p className="text-sm text-muted-foreground">Análisis dinámico basado en datos históricos de ventas</p>
               </div>
             </div>
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-3">
                 <div className="flex flex-col items-end">
-                  <span className="text-sm font-medium text-foreground">
-                    {user.email}
-                  </span>
-                    <div className="flex items-center gap-3 mt-1">
-                      {userRole ? (
-                        <>
-                          <span className="text-xs font-semibold text-primary bg-primary/10 px-3 py-1 rounded-full border border-primary/20">
-                            <Shield className="h-3 w-3 inline mr-1" />
-                            {userRole === "admin_ventas"
-                              ? "Admin. Ventas"
-                              : userRole === "administrador"
-                                ? "Administrador"
-                                : userRole === "gerente"
-                                  ? "Gerente"
-                                  : userRole === "vendedor"
-                                    ? "Vendedor"
-                                    : userRole === "contabilidad"
-                                      ? "Contabilidad"
-                                      : userRole}
-                          </span>
-                          <Select value={activeRole || undefined} onValueChange={handleRoleChange}>
-                            <SelectTrigger className="h-7 w-[140px] text-xs">
-                              <SelectValue placeholder="Ver como..." />
-                            </SelectTrigger>
-                            <SelectContent className="bg-card z-50">
-                              {availableRoles.map((role) => (
-                                <SelectItem key={role.value} value={role.value}>
-                                  {role.label}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </>
-                      ) : isRoleLoading ? (
-                        <span className="text-xs text-muted-foreground bg-muted px-3 py-1 rounded-full">
-                          Verificando rol...
+                  <span className="text-sm font-medium text-foreground">{user.email}</span>
+                  <div className="flex items-center gap-3 mt-1">
+                    {userRole ? (
+                      <>
+                        <span className="text-xs font-semibold text-primary bg-primary/10 px-3 py-1 rounded-full border border-primary/20">
+                          <Shield className="h-3 w-3 inline mr-1" />
+                          {userRole === "admin_ventas"
+                            ? "Admin. Ventas"
+                            : userRole === "administrador"
+                              ? "Administrador"
+                              : userRole === "gerente"
+                                ? "Gerente"
+                                : userRole === "vendedor"
+                                  ? "Vendedor"
+                                  : userRole === "contabilidad"
+                                    ? "Contabilidad"
+                                    : userRole}
                         </span>
-                      ) : (
-                        <span className="text-xs text-muted-foreground bg-muted px-3 py-1 rounded-full">
-                          Sin rol asignado
-                        </span>
-                      )}
-                    </div>
+                        <Select value={activeRole || undefined} onValueChange={handleRoleChange}>
+                          <SelectTrigger className="h-7 w-[140px] text-xs">
+                            <SelectValue placeholder="Ver como..." />
+                          </SelectTrigger>
+                          <SelectContent className="bg-card z-50">
+                            {availableRoles.map((role) => (
+                              <SelectItem key={role.value} value={role.value}>
+                                {role.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </>
+                    ) : isRoleLoading ? (
+                      <span className="text-xs text-muted-foreground bg-muted px-3 py-1 rounded-full">
+                        Verificando rol...
+                      </span>
+                    ) : (
+                      <span className="text-xs text-muted-foreground bg-muted px-3 py-1 rounded-full">
+                        Sin rol asignado
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
               {activeRole === "contabilidad" && (
@@ -689,260 +753,313 @@ const Index = () => {
                 </div>
               </Card>
             ) : (
-            <Card className="p-6 shadow-md">
+              <Card className="p-6 shadow-md">
                 <BudgetForm
-                  onCalculate={handleCalculate} 
+                  onCalculate={handleCalculate}
                   mockData={{
-                    marcas: marcas.map(m => m.nombre),
+                    marcas: marcas.map((m) => m.nombre),
                     marcasConCodigo: marcas,
                     empresas: ["Cofersa", "Empresa Alpha", "Empresa Beta", "Empresa Gamma"],
-                    articulos: marcas.reduce((acc, m) => {
-                      acc[m.nombre] = [m.nombre];
-                      return acc;
-                    }, {} as Record<string, string[]>)
+                    articulos: marcas.reduce(
+                      (acc, m) => {
+                        acc[m.nombre] = [m.nombre];
+                        return acc;
+                      },
+                      {} as Record<string, string[]>,
+                    ),
                   }}
-                  mesesDisponibles={mesesDisponibles} 
-                  onMarcasPresupuestoLoad={setMarcasPresupuesto} 
-                  historicalBudgets={allHistoricalBudgets} 
+                  mesesDisponibles={mesesDisponibles}
+                  onMarcasPresupuestoLoad={setMarcasPresupuesto}
+                  historicalBudgets={allHistoricalBudgets}
                   ventasData={(() => {
                     // Create maps once, outside the map function
-                    const marcasMap = new Map(marcas.map(m => [m.codigo, m.nombre]));
-                    const clientesMap = new Map(clientes.map(c => [c.codigo, c.nombre]));
-                    const vendedoresMap = new Map(vendedores.map(v => [v.codigo, v.nombre]));
-                    
-                    const ventasTransformadas = ventas.map(v => {
-                      // Convert mes format from database to match mesesDisponibles format
-                      // Database format might be "2024-11" or "noviembre-2024"
-                      let mesAnio = v.mes;
-                      
-                      // If format is "YYYY-MM", convert to "mes-YYYY"
-                      if (v.mes.match(/^\d{4}-\d{2}$/)) {
-                        const [year, month] = v.mes.split('-');
-                        const date = new Date(parseInt(year), parseInt(month) - 1, 1);
-                        const mes = date.toLocaleString("es-ES", { month: "long" });
-                        mesAnio = `${mes}-${year}`;
-                      }
-                      
-                      // Only include if client name is found
-                      const clienteNombre = clientesMap.get(v.codigo_cliente);
-                      if (!clienteNombre) return null;
-                      
-                      return {
-                        mesAnio,
-                        marca: marcasMap.get(v.codigo_marca) || v.codigo_marca,
-                        cliente: clienteNombre,
-                        articulo: marcasMap.get(v.codigo_marca) || v.codigo_marca,
-                        vendedor: v.codigo_vendedor 
-                          ? (vendedoresMap.get(v.codigo_vendedor) || v.codigo_vendedor)
-                          : 'Sin vendedor',
-                        empresa: "Empresa Alpha",
-                        venta: v.monto
-                      };
-                    }).filter((v): v is NonNullable<typeof v> => v !== null);
-                    
-                    console.log('Ventas transformadas sample:', ventasTransformadas.slice(0, 3));
-                    console.log('Meses disponibles sample:', mesesDisponibles.slice(0, 3));
-                    console.log('Total ventas:', ventasTransformadas.length);
-                    console.log('Marcas disponibles:', marcas.map(m => m.nombre));
-                    
+                    const marcasMap = new Map(marcas.map((m) => [m.codigo, m.nombre]));
+                    const clientesMap = new Map(clientes.map((c) => [c.codigo, c.nombre]));
+                    const vendedoresMap = new Map(vendedores.map((v) => [v.codigo, v.nombre]));
+
+                    const ventasTransformadas = ventas
+                      .map((v) => {
+                        // Convert mes format from database to match mesesDisponibles format
+                        // Database format might be "2024-11" or "noviembre-2024"
+                        let mesAnio = v.mes;
+
+                        // If format is "YYYY-MM", convert to "mes-YYYY"
+                        if (v.mes.match(/^\d{4}-\d{2}$/)) {
+                          const [year, month] = v.mes.split("-");
+                          const date = new Date(parseInt(year), parseInt(month) - 1, 1);
+                          const mes = date.toLocaleString("es-ES", { month: "long" });
+                          mesAnio = `${mes}-${year}`;
+                        }
+
+                        // Only include if client name is found
+                        const clienteNombre = clientesMap.get(v.codigo_cliente);
+                        if (!clienteNombre) return null;
+
+                        return {
+                          mesAnio,
+                          marca: marcasMap.get(v.codigo_marca) || v.codigo_marca,
+                          cliente: clienteNombre,
+                          articulo: marcasMap.get(v.codigo_marca) || v.codigo_marca,
+                          vendedor: v.codigo_vendedor
+                            ? vendedoresMap.get(v.codigo_vendedor) || v.codigo_vendedor
+                            : "Sin vendedor",
+                          empresa: "Empresa Alpha",
+                          venta: v.monto,
+                        };
+                      })
+                      .filter((v): v is NonNullable<typeof v> => v !== null);
+
+                    console.log("Ventas transformadas sample:", ventasTransformadas.slice(0, 3));
+                    console.log("Meses disponibles sample:", mesesDisponibles.slice(0, 3));
+                    console.log("Total ventas:", ventasTransformadas.length);
+                    console.log(
+                      "Marcas disponibles:",
+                      marcas.map((m) => m.nombre),
+                    );
+
                     return ventasTransformadas;
                   })()}
                   vendorAdjustments={vendorAdjustments}
                   brandAdjustments={brandAdjustments}
                   presupuestoTotal={marcasPresupuesto.reduce((sum, mp) => sum + mp.presupuesto, 0)}
                 />
-            </Card>
+              </Card>
             )}
 
             <div>
-            {activeRole === "administrador" ? <Tabs defaultValue="results" className="space-y-6">
-                <TabsList className="grid w-full grid-cols-4 h-auto">
-                  <TabsTrigger value="results" className="text-sm">Parámetros</TabsTrigger>
-                  <TabsTrigger value="vendors" disabled={!result} className="text-sm">Vendedores-Clientes</TabsTrigger>
-                  <TabsTrigger value="import" className="text-sm">Importar Datos</TabsTrigger>
-                  <TabsTrigger value="roles" className="text-sm flex items-center gap-1">
-                    <Shield className="h-3.5 w-3.5" />
-                    <span>Usuarios</span>
-                  </TabsTrigger>
-                </TabsList>
+              {activeRole === "administrador" ? (
+                <Tabs defaultValue="results" className="space-y-6">
+                  <TabsList className="grid w-full grid-cols-4 h-auto">
+                    <TabsTrigger value="results" className="text-sm">
+                      Parámetros
+                    </TabsTrigger>
+                    <TabsTrigger value="vendors" disabled={!result} className="text-sm">
+                      Vendedores-Clientes
+                    </TabsTrigger>
+                    <TabsTrigger value="import" className="text-sm">
+                      Importar Datos
+                    </TabsTrigger>
+                    <TabsTrigger value="roles" className="text-sm flex items-center gap-1">
+                      <Shield className="h-3.5 w-3.5" />
+                      <span>Usuarios</span>
+                    </TabsTrigger>
+                  </TabsList>
 
-                <TabsContent value="results" className="space-y-6">
-                  {result && activeRole === "administrador" && vendedoresUnicos.length > 0 && <Card className="p-4">
-                      <VendorAdjustment 
-                        vendedores={vendedoresUnicos} 
-                        presupuestoTotal={result.resultadosMarcas.reduce((sum, m) => 
-                          sum + m.distribucionClientes.reduce((s, c) => s + c.subtotal, 0), 0
-                        )} 
-                        onAdjust={setVendorAdjustments}
+                  <TabsContent value="results" className="space-y-6">
+                    {result && activeRole === "administrador" && vendedoresUnicos.length > 0 && (
+                      <Card className="p-4">
+                        <VendorAdjustment
+                          vendedores={vendedoresUnicos}
+                          presupuestoTotal={result.resultadosMarcas.reduce(
+                            (sum, m) => sum + m.distribucionClientes.reduce((s, c) => s + c.subtotal, 0),
+                            0,
+                          )}
+                          onAdjust={setVendorAdjustments}
+                          marcasPresupuesto={marcasPresupuesto}
+                          userId={user.id}
+                          userRole={userRole}
+                        />
+                      </Card>
+                    )}
+
+                    {result && (
+                      <>
+                        <div className="grid gap-4 md:grid-cols-4">
+                          <MetricsCard
+                            title="Presupuesto Base"
+                            value={`$${result.resultadosMarcas
+                              .reduce((sum, m) => sum + m.distribucionClientes.reduce((s, c) => s + c.subtotal, 0), 0)
+                              .toLocaleString("es-ES", {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              })}`}
+                            icon={TrendingUp}
+                            trend="neutral"
+                            subtitle="Suma Ppto Asociado"
+                          />
+                          <MetricsCard
+                            title="Ppto Excel"
+                            value={`$${result.totalPresupuesto.toLocaleString("es-ES", {
+                              minimumFractionDigits: 2,
+                              maximumFractionDigits: 2,
+                            })}`}
+                            icon={Calculator}
+                            trend="neutral"
+                            subtitle="Total del archivo"
+                          />
+                          <MetricsCard
+                            title="Venta Real"
+                            value={`$${result.resultadosMarcas
+                              .reduce(
+                                (sum, m) =>
+                                  sum +
+                                  m.distribucionClientes.reduce(
+                                    (s, c) => s + c.articulos.reduce((a, art) => a + art.ventaReal, 0),
+                                    0,
+                                  ),
+                                0,
+                              )
+                              .toLocaleString("es-ES", {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              })}`}
+                            icon={Calendar}
+                            trend="neutral"
+                            subtitle="Meses referencia"
+                          />
+                          <MetricsCard
+                            title="Errores"
+                            value={result.errores.length.toString()}
+                            icon={Users}
+                            trend={result.errores.length > 0 ? "negative" : "positive"}
+                            subtitle="Marcas con error"
+                          />
+                        </div>
+
+                        <BudgetResults result={result} />
+                        <FormulaExplanation />
+                      </>
+                    )}
+                  </TabsContent>
+
+                  {result && (activeRole === "administrador" || activeRole === "admin_ventas") && (
+                    <TabsContent value="vendors">
+                      <VendorClientTable
+                        result={result}
+                        vendorAdjustments={vendorAdjustments}
+                        presupuestoTotal={result.resultadosMarcas.reduce(
+                          (sum, m) => sum + m.distribucionClientes.reduce((s, c) => s + c.subtotal, 0),
+                          0,
+                        )}
+                        userRole={activeRole}
                         marcasPresupuesto={marcasPresupuesto}
                         userId={user.id}
-                        userRole={userRole}
+                        onBrandAdjustmentsChange={setBrandAdjustments}
                       />
-                    </Card>}
-                  
-                  {result && <>
-                  <div className="grid gap-4 md:grid-cols-4">
-                    <MetricsCard 
-                      title="Presupuesto Base" 
-                      value={`$${result.resultadosMarcas.reduce((sum, m) => 
-                        sum + m.distribucionClientes.reduce((s, c) => s + c.subtotal, 0), 0
-                      ).toLocaleString("es-ES", {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2
-                      })}`} 
-                      icon={TrendingUp} 
-                      trend="neutral" 
-                      subtitle="Suma Ppto Asociado"
-                    />
-                    <MetricsCard 
-                      title="Ppto Excel" 
-                      value={`$${result.totalPresupuesto.toLocaleString("es-ES", {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2
-                      })}`} 
-                      icon={Calculator} 
-                      trend="neutral" 
-                      subtitle="Total del archivo"
-                    />
-                    <MetricsCard 
-                      title="Venta Real" 
-                      value={`$${result.resultadosMarcas.reduce((sum, m) => 
-                        sum + m.distribucionClientes.reduce((s, c) => 
-                          s + c.articulos.reduce((a, art) => a + art.ventaReal, 0), 0
-                        ), 0
-                      ).toLocaleString("es-ES", {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2
-                      })}`} 
-                      icon={Calendar} 
-                      trend="neutral" 
-                      subtitle="Meses referencia" 
-                    />
-                    <MetricsCard 
-                      title="Errores" 
-                      value={result.errores.length.toString()} 
-                      icon={Users} 
-                      trend={result.errores.length > 0 ? "negative" : "positive"} 
-                      subtitle="Marcas con error" 
-                    />
-                  </div>
+                    </TabsContent>
+                  )}
 
-                  <BudgetResults result={result} />
-                  <FormulaExplanation />
-                  </>}
-                </TabsContent>
+                  <TabsContent value="import">
+                    <CSVImport />
+                  </TabsContent>
 
-                {result && (activeRole === "administrador" || activeRole === "admin_ventas") && <TabsContent value="vendors">
-                    <VendorClientTable 
-                      result={result} 
-                      vendorAdjustments={vendorAdjustments} 
-                      presupuestoTotal={result.resultadosMarcas.reduce((sum, m) => 
-                        sum + m.distribucionClientes.reduce((s, c) => s + c.subtotal, 0), 0
-                      )} 
-                      userRole={activeRole}
-                      marcasPresupuesto={marcasPresupuesto}
-                      userId={user.id}
-                      onBrandAdjustmentsChange={setBrandAdjustments}
-                    />
-                  </TabsContent>}
+                  <TabsContent value="roles">
+                    <RoleManagement />
+                  </TabsContent>
+                </Tabs>
+              ) : (
+                <Tabs defaultValue="results" className="space-y-6">
+                  <TabsList
+                    className={`grid w-full ${activeRole === "gerente" || activeRole === "admin_ventas" ? "grid-cols-2" : "grid-cols-1"}`}
+                  >
+                    <TabsTrigger value="results">Parámetros</TabsTrigger>
+                    {(activeRole === "gerente" || activeRole === "admin_ventas") && (
+                      <TabsTrigger value="vendors">Vendedores-Clientes</TabsTrigger>
+                    )}
+                  </TabsList>
 
-                <TabsContent value="import">
-                  <CSVImport />
-                </TabsContent>
+                  <TabsContent value="results" className="space-y-6">
+                    {result &&
+                      (activeRole === "administrador" || activeRole === "gerente" || activeRole === "admin_ventas") &&
+                      vendedoresUnicos.length > 0 && (
+                        <Card className="p-4">
+                          <VendorAdjustment
+                            vendedores={vendedoresUnicos}
+                            presupuestoTotal={result.resultadosMarcas.reduce(
+                              (sum, m) => sum + m.distribucionClientes.reduce((s, c) => s + c.subtotal, 0),
+                              0,
+                            )}
+                            onAdjust={setVendorAdjustments}
+                            marcasPresupuesto={marcasPresupuesto}
+                            userId={user.id}
+                            userRole={userRole}
+                          />
+                        </Card>
+                      )}
 
-                <TabsContent value="roles">
-                  <RoleManagement />
-                </TabsContent>
-              </Tabs> : <Tabs defaultValue="results" className="space-y-6">
-                <TabsList className={`grid w-full ${activeRole === "gerente" || activeRole === "admin_ventas" ? "grid-cols-2" : "grid-cols-1"}`}>
-                  <TabsTrigger value="results">Parámetros</TabsTrigger>
-                  {(activeRole === "gerente" || activeRole === "admin_ventas") && <TabsTrigger value="vendors">Vendedores-Clientes</TabsTrigger>}
-                </TabsList>
+                    {result && (
+                      <>
+                        <div className="grid gap-4 md:grid-cols-4">
+                          <MetricsCard
+                            title="Presupuesto Base"
+                            value={`$${result.resultadosMarcas
+                              .reduce((sum, m) => sum + m.distribucionClientes.reduce((s, c) => s + c.subtotal, 0), 0)
+                              .toLocaleString("es-ES", {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              })}`}
+                            icon={TrendingUp}
+                            trend="neutral"
+                            subtitle="Suma Ppto Asociado"
+                          />
+                          <MetricsCard
+                            title="Ppto Excel"
+                            value={`$${result.totalPresupuesto.toLocaleString("es-ES", {
+                              minimumFractionDigits: 2,
+                              maximumFractionDigits: 2,
+                            })}`}
+                            icon={Calculator}
+                            trend="neutral"
+                            subtitle="Total del archivo"
+                          />
+                          <MetricsCard
+                            title="Venta Real"
+                            value={`$${result.resultadosMarcas
+                              .reduce(
+                                (sum, m) =>
+                                  sum +
+                                  m.distribucionClientes.reduce(
+                                    (s, c) => s + c.articulos.reduce((a, art) => a + art.ventaReal, 0),
+                                    0,
+                                  ),
+                                0,
+                              )
+                              .toLocaleString("es-ES", {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              })}`}
+                            icon={Calendar}
+                            trend="neutral"
+                            subtitle="Meses referencia"
+                          />
+                          <MetricsCard
+                            title="Errores"
+                            value={result.errores.length.toString()}
+                            icon={Users}
+                            trend={result.errores.length > 0 ? "negative" : "positive"}
+                            subtitle="Marcas con error"
+                          />
+                        </div>
 
-                <TabsContent value="results" className="space-y-6">
-                  {result && (activeRole === "administrador" || activeRole === "gerente" || activeRole === "admin_ventas") && vendedoresUnicos.length > 0 && <Card className="p-4">
-                      <VendorAdjustment 
-                        vendedores={vendedoresUnicos} 
-                        presupuestoTotal={result.resultadosMarcas.reduce((sum, m) => 
-                          sum + m.distribucionClientes.reduce((s, c) => s + c.subtotal, 0), 0
-                        )} 
-                        onAdjust={setVendorAdjustments}
+                        <BudgetResults result={result} />
+                        <FormulaExplanation />
+                      </>
+                    )}
+                  </TabsContent>
+
+                  {result && (activeRole === "gerente" || activeRole === "admin_ventas") && (
+                    <TabsContent value="vendors">
+                      <VendorClientTable
+                        result={result}
+                        vendorAdjustments={vendorAdjustments}
+                        presupuestoTotal={result.resultadosMarcas.reduce(
+                          (sum, m) => sum + m.distribucionClientes.reduce((s, c) => s + c.subtotal, 0),
+                          0,
+                        )}
+                        userRole={activeRole}
                         marcasPresupuesto={marcasPresupuesto}
                         userId={user.id}
-                        userRole={userRole}
+                        onBrandAdjustmentsChange={setBrandAdjustments}
                       />
-                    </Card>}
-                  
-                  {result && <>
-                  <div className="grid gap-4 md:grid-cols-4">
-                    <MetricsCard 
-                      title="Presupuesto Base" 
-                      value={`$${result.resultadosMarcas.reduce((sum, m) => 
-                        sum + m.distribucionClientes.reduce((s, c) => s + c.subtotal, 0), 0
-                      ).toLocaleString("es-ES", {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2
-                      })}`} 
-                      icon={TrendingUp} 
-                      trend="neutral" 
-                      subtitle="Suma Ppto Asociado"
-                    />
-                    <MetricsCard 
-                      title="Ppto Excel" 
-                      value={`$${result.totalPresupuesto.toLocaleString("es-ES", {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2
-                      })}`} 
-                      icon={Calculator} 
-                      trend="neutral" 
-                      subtitle="Total del archivo"
-                    />
-                    <MetricsCard 
-                      title="Venta Real" 
-                      value={`$${result.resultadosMarcas.reduce((sum, m) => 
-                        sum + m.distribucionClientes.reduce((s, c) => 
-                          s + c.articulos.reduce((a, art) => a + art.ventaReal, 0), 0
-                        ), 0
-                      ).toLocaleString("es-ES", {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2
-                      })}`} 
-                      icon={Calendar} 
-                      trend="neutral" 
-                      subtitle="Meses referencia" 
-                    />
-                    <MetricsCard 
-                      title="Errores" 
-                      value={result.errores.length.toString()} 
-                      icon={Users} 
-                      trend={result.errores.length > 0 ? "negative" : "positive"} 
-                      subtitle="Marcas con error" 
-                    />
-                  </div>
-
-                  <BudgetResults result={result} />
-                  <FormulaExplanation />
-                  </>}
-                </TabsContent>
-
-                {result && (activeRole === "gerente" || activeRole === "admin_ventas") && <TabsContent value="vendors">
-                    <VendorClientTable 
-                      result={result} 
-                      vendorAdjustments={vendorAdjustments} 
-                      presupuestoTotal={result.resultadosMarcas.reduce((sum, m) => 
-                        sum + m.distribucionClientes.reduce((s, c) => s + c.subtotal, 0), 0
-                      )} 
-                      userRole={activeRole}
-                      marcasPresupuesto={marcasPresupuesto}
-                      userId={user.id}
-                      onBrandAdjustmentsChange={setBrandAdjustments}
-                    />
-                  </TabsContent>}
-              </Tabs>}
+                    </TabsContent>
+                  )}
+                </Tabs>
+              )}
             </div>
           </div>
         )}
       </main>
-    </div>;
+    </div>
+  );
 };
 export default Index;

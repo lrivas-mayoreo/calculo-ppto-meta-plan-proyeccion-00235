@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,141 +11,189 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import {
-  Alert,
-  AlertDescription,
-} from "@/components/ui/alert";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Settings, AlertTriangle } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Settings, AlertTriangle, Lock } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+
+interface VendorAdjustment {
+  amount: number;
+  percentage: number;
+  fixedField: "amount" | "percentage" | null;
+}
 
 interface VendorAdjustmentProps {
   vendedores: string[];
   presupuestoTotal: number;
-  onAdjust: (adjustments: Record<string, { value: number; type: "percentage" | "currency" }>) => void;
+  onAdjust: (adjustments: Record<string, VendorAdjustment>) => void;
   marcasPresupuesto: Array<{ marca: string; empresa: string; presupuesto: number; fechaDestino: string }>;
   userId: string;
   userRole: string | null;
 }
 
-export const VendorAdjustment = ({ vendedores, presupuestoTotal, onAdjust, marcasPresupuesto, userId, userRole }: VendorAdjustmentProps) => {
+export const VendorAdjustment = ({
+  vendedores,
+  presupuestoTotal,
+  onAdjust,
+  marcasPresupuesto,
+  userId,
+  userRole,
+}: VendorAdjustmentProps) => {
   const [open, setOpen] = useState(false);
-  const [adjustmentType, setAdjustmentType] = useState<"percentage" | "currency">("currency");
-  const initialValue = adjustmentType === "percentage" ? 100 : presupuestoTotal / vendedores.length;
-  const [adjustments, setAdjustments] = useState<Record<string, number>>(
-    vendedores.reduce((acc, v) => ({ ...acc, [v]: initialValue }), {})
-  );
+  const [adjustments, setAdjustments] = useState<Record<string, VendorAdjustment>>({});
   const [fixedVendors, setFixedVendors] = useState<Set<string>>(new Set());
 
-  const handleAdjustmentChange = (vendedor: string, value: string) => {
+  // Initialize with equal distribution
+  useEffect(() => {
+    if (vendedores.length > 0 && presupuestoTotal > 0) {
+      const equalAmount = presupuestoTotal / vendedores.length;
+      const equalPercentage = 100 / vendedores.length;
+
+      const initialAdjustments: Record<string, VendorAdjustment> = {};
+      vendedores.forEach((v) => {
+        initialAdjustments[v] = {
+          amount: equalAmount,
+          percentage: equalPercentage,
+          fixedField: null,
+        };
+      });
+
+      setAdjustments(initialAdjustments);
+      setFixedVendors(new Set());
+    }
+  }, [vendedores, presupuestoTotal]);
+
+  const handleAmountChange = (vendedor: string, value: string) => {
     const numValue = parseFloat(value) || 0;
-    
-    // Mark this vendor as fixed (manually adjusted)
+
+    // Mark this vendor as fixed by amount
     const newFixedVendors = new Set(fixedVendors);
     newFixedVendors.add(vendedor);
     setFixedVendors(newFixedVendors);
 
     const newAdjustments = { ...adjustments };
-    newAdjustments[vendedor] = numValue;
 
-    // Get unfixed vendors (excluding fixed ones)
-    const unfixedVendors = vendedores.filter(v => !newFixedVendors.has(v));
-    
+    // Update this vendor's amount and calculate percentage
+    newAdjustments[vendedor] = {
+      amount: numValue,
+      percentage: presupuestoTotal > 0 ? (numValue / presupuestoTotal) * 100 : 0,
+      fixedField: "amount",
+    };
+
+    // Get unfixed vendors
+    const unfixedVendors = vendedores.filter((v) => !newFixedVendors.has(v));
+
     if (unfixedVendors.length > 0) {
-      // Calculate total expected and total fixed
-      const expectedTotal = adjustmentType === "percentage" ? 100 : presupuestoTotal;
+      // Calculate remaining amount for unfixed vendors
       const totalFixed = vendedores
-        .filter(v => newFixedVendors.has(v))
-        .reduce((sum, v) => sum + newAdjustments[v], 0);
-      
-      const remainingTotal = expectedTotal - totalFixed;
-      
-      // Distribute remaining total equally among unfixed vendors
-      const valuePerUnfixed = remainingTotal / unfixedVendors.length;
-      
-      unfixedVendors.forEach(v => {
-        newAdjustments[v] = Math.max(0, valuePerUnfixed);
+        .filter((v) => newFixedVendors.has(v))
+        .reduce((sum, v) => sum + newAdjustments[v].amount, 0);
+
+      const remainingAmount = presupuestoTotal - totalFixed;
+      const amountPerUnfixed = remainingAmount / unfixedVendors.length;
+
+      unfixedVendors.forEach((v) => {
+        const amount = Math.max(0, amountPerUnfixed);
+        newAdjustments[v] = {
+          amount,
+          percentage: presupuestoTotal > 0 ? (amount / presupuestoTotal) * 100 : 0,
+          fixedField: newAdjustments[v]?.fixedField || null,
+        };
       });
     }
 
     setAdjustments(newAdjustments);
   };
 
-  const handleTypeChange = (newType: "percentage" | "currency") => {
-    setAdjustmentType(newType);
-    
-    const baseValue = newType === "percentage" ? 100 : presupuestoTotal / vendedores.length;
-    const newAdjustments = vendedores.reduce((acc, v) => ({ ...acc, [v]: baseValue }), {});
+  const handlePercentageChange = (vendedor: string, value: string) => {
+    const numValue = parseFloat(value) || 0;
+
+    // Mark this vendor as fixed by percentage
+    const newFixedVendors = new Set(fixedVendors);
+    newFixedVendors.add(vendedor);
+    setFixedVendors(newFixedVendors);
+
+    const newAdjustments = { ...adjustments };
+
+    // Update this vendor's percentage and calculate amount
+    newAdjustments[vendedor] = {
+      percentage: numValue,
+      amount: (presupuestoTotal * numValue) / 100,
+      fixedField: "percentage",
+    };
+
+    // Get unfixed vendors
+    const unfixedVendors = vendedores.filter((v) => !newFixedVendors.has(v));
+
+    if (unfixedVendors.length > 0) {
+      // Calculate remaining percentage for unfixed vendors
+      const totalFixedPercentage = vendedores
+        .filter((v) => newFixedVendors.has(v))
+        .reduce((sum, v) => sum + newAdjustments[v].percentage, 0);
+
+      const remainingPercentage = 100 - totalFixedPercentage;
+      const percentagePerUnfixed = remainingPercentage / unfixedVendors.length;
+
+      unfixedVendors.forEach((v) => {
+        const percentage = Math.max(0, percentagePerUnfixed);
+        newAdjustments[v] = {
+          percentage,
+          amount: (presupuestoTotal * percentage) / 100,
+          fixedField: newAdjustments[v]?.fixedField || null,
+        };
+      });
+    }
+
     setAdjustments(newAdjustments);
-    setFixedVendors(new Set());
   };
 
   const handleApply = async () => {
-    const total = Object.values(adjustments).reduce((sum, val) => sum + val, 0);
-    const expectedTotal = adjustmentType === "percentage" 
-      ? 100 
-      : presupuestoTotal;
-    
-    if (Math.abs(total - expectedTotal) > 0.01) {
+    const totalAmount = Object.values(adjustments).reduce((sum, adj) => sum + adj.amount, 0);
+    const totalPercentage = Object.values(adjustments).reduce((sum, adj) => sum + adj.percentage, 0);
+
+    // Validate totals (allow small rounding errors)
+    if (Math.abs(totalAmount - presupuestoTotal) > 0.01) {
       toast.error(
-        adjustmentType === "percentage"
-          ? `Error: La suma debe ser exactamente 100%. Actual: ${total.toFixed(2)}%`
-          : `Error: La suma debe ser exactamente $${expectedTotal.toLocaleString("es-ES", { minimumFractionDigits: 2 })}. Actual: $${total.toLocaleString("es-ES", { minimumFractionDigits: 2 })}`
+        `Error: La suma de montos debe ser exactamente $${presupuestoTotal.toLocaleString("es-ES", { minimumFractionDigits: 2 })}. Actual: $${totalAmount.toLocaleString("es-ES", { minimumFractionDigits: 2 })}`,
       );
       return;
     }
 
-    const adjustmentsWithType = Object.fromEntries(
-      Object.entries(adjustments).map(([vendor, value]) => [
-        vendor,
-        { value, type: adjustmentType }
-      ])
-    );
+    if (Math.abs(totalPercentage - 100) > 0.01) {
+      toast.error(`Error: La suma de porcentajes debe ser exactamente 100%. Actual: ${totalPercentage.toFixed(2)}%`);
+      return;
+    }
 
-    const changedVendors = Object.entries(adjustments).filter(
-      ([v, val]) => adjustmentType === "percentage" ? val !== 100 : val !== presupuestoTotal / vendedores.length
-    );
-    
+    const changedVendors = Object.entries(adjustments).filter(([v, adj]) => adj.fixedField !== null);
+
     if (changedVendors.length > 0) {
       const message = changedVendors
-        .map(([v, val]) => 
-          adjustmentType === "percentage" 
-            ? `${v} (${val.toFixed(2)}%)`
-            : `${v} ($${val.toLocaleString("es-ES", { minimumFractionDigits: 2 })})`
+        .map(
+          ([v, adj]) =>
+            `${v} ($${adj.amount.toLocaleString("es-ES", { minimumFractionDigits: 2 })} / ${adj.percentage.toFixed(2)}%)`,
         )
         .join(", ");
-      toast.warning(`Ajuste aplicado: ${message}`);
+      toast.success(`Ajuste aplicado: ${message}`);
     }
 
     // Save adjustments to database
     try {
-      const updates = marcasPresupuesto.map(mp => ({
+      const updates = marcasPresupuesto.map((mp) => ({
         user_id: userId,
         marca: mp.marca,
         empresa: mp.empresa,
         presupuesto: mp.presupuesto,
         fecha_destino: mp.fechaDestino,
-        vendor_adjustments: adjustmentsWithType,
-        role: (userRole as "administrador" | "gerente" | "admin_ventas") || 'administrador',
+        vendor_adjustments: adjustments,
+        role: (userRole as "administrador" | "gerente" | "admin_ventas") || "administrador",
       }));
 
       // First delete existing entries for these brands
-      const marcasToUpdate = [...new Set(updates.map(u => u.marca))];
-      await supabase
-        .from('budgets')
-        .delete()
-        .eq('user_id', userId)
-        .in('marca', marcasToUpdate);
+      const marcasToUpdate = [...new Set(updates.map((u) => u.marca))];
+      await supabase.from("budgets").delete().eq("user_id", userId).in("marca", marcasToUpdate);
 
       // Then insert new values
-      const { error } = await supabase.from('budgets').insert(updates);
+      const { error } = await supabase.from("budgets").insert(updates);
 
       if (error) throw error;
       toast.success("Ajustes guardados en la base de datos");
@@ -154,13 +202,13 @@ export const VendorAdjustment = ({ vendedores, presupuestoTotal, onAdjust, marca
       toast.error("Error al guardar ajustes");
     }
 
-    onAdjust(adjustmentsWithType);
+    onAdjust(adjustments);
     setOpen(false);
   };
 
-  const totalValue = Object.values(adjustments).reduce((sum, val) => sum + val, 0);
-  const expectedTotal = adjustmentType === "percentage" ? 100 : presupuestoTotal;
-  const isValid = Math.abs(totalValue - expectedTotal) < 0.01;
+  const totalAmount = Object.values(adjustments).reduce((sum, adj) => sum + adj.amount, 0);
+  const totalPercentage = Object.values(adjustments).reduce((sum, adj) => sum + adj.percentage, 0);
+  const isValid = Math.abs(totalAmount - presupuestoTotal) < 0.01 && Math.abs(totalPercentage - 100) < 0.01;
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -170,80 +218,103 @@ export const VendorAdjustment = ({ vendedores, presupuestoTotal, onAdjust, marca
           Ajustar Vendedores
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Ajustar Distribución de Vendedores</DialogTitle>
           <DialogDescription>
-            Modifique el presupuesto de cualquier vendedor. Los valores ajustados quedan fijos y el resto se distribuye entre los no ajustados. El total siempre debe sumar 100% o el presupuesto total.
+            Modifique el monto ($) o porcentaje (%) de cualquier vendedor. Al ajustar uno, el otro se calcula
+            automáticamente. Los vendedores no ajustados se redistribuyen equitativamente. El total siempre debe sumar
+            100% o el presupuesto total.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="adjustment-type">Tipo de Ajuste</Label>
-            <Select value={adjustmentType} onValueChange={handleTypeChange}>
-              <SelectTrigger id="adjustment-type">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="percentage">Porcentaje (%)</SelectItem>
-                <SelectItem value="currency">Moneda ($)</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
           <Alert variant={isValid ? "default" : "destructive"}>
             <AlertTriangle className="h-4 w-4" />
             <AlertDescription>
               {isValid
-                ? `Distribución válida - El presupuesto se ajusta automáticamente`
-                : adjustmentType === "percentage"
-                ? `Total: ${totalValue.toFixed(2)}% - Esperado: ${expectedTotal}%`
-                : `Total: $${totalValue.toLocaleString("es-ES", { minimumFractionDigits: 2 })} - Esperado: $${expectedTotal.toLocaleString("es-ES", { minimumFractionDigits: 2 })}`}
+                ? `✓ Distribución válida - Total: $${totalAmount.toLocaleString("es-ES", { minimumFractionDigits: 2 })} (${totalPercentage.toFixed(2)}%)`
+                : `⚠ Total: $${totalAmount.toLocaleString("es-ES", { minimumFractionDigits: 2 })} (${totalPercentage.toFixed(2)}%) - Esperado: $${presupuestoTotal.toLocaleString("es-ES", { minimumFractionDigits: 2 })} (100%)`}
             </AlertDescription>
           </Alert>
 
           <div className="grid gap-4 py-4">
             {vendedores.map((vendedor) => {
+              const adj = adjustments[vendedor];
               const isFixed = fixedVendors.has(vendedor);
+
+              if (!adj) return null;
+
               return (
-                <div key={vendedor} className="grid grid-cols-4 items-center gap-4">
-                  <Label htmlFor={vendedor} className="col-span-2">
+                <div key={vendedor} className="grid grid-cols-12 items-center gap-3 p-3 rounded-lg border bg-card">
+                  <Label className="col-span-3 font-medium">
                     {vendedor}
                     {isFixed && <span className="ml-2 text-xs text-primary">(Fijo)</span>}
                   </Label>
-                  <Input
-                    id={vendedor}
-                    type="number"
-                    step="0.01"
-                    value={adjustments[vendedor]?.toFixed(2) || 0}
-                    onChange={(e) => handleAdjustmentChange(vendedor, e.target.value)}
-                    className={`col-span-2 ${isFixed ? "border-primary" : ""}`}
-                  />
+
+                  <div className="col-span-4 space-y-1">
+                    <Label htmlFor={`${vendedor}-amount`} className="text-xs text-muted-foreground">
+                      Monto ($)
+                      {adj.fixedField === "amount" && <Lock className="inline h-3 w-3 ml-1 text-primary" />}
+                    </Label>
+                    <Input
+                      id={`${vendedor}-amount`}
+                      type="number"
+                      step="0.01"
+                      value={adj.amount.toFixed(2)}
+                      onChange={(e) => handleAmountChange(vendedor, e.target.value)}
+                      className={adj.fixedField === "amount" ? "border-primary font-semibold" : ""}
+                    />
+                  </div>
+
+                  <div className="col-span-4 space-y-1">
+                    <Label htmlFor={`${vendedor}-percentage`} className="text-xs text-muted-foreground">
+                      Porcentaje (%)
+                      {adj.fixedField === "percentage" && <Lock className="inline h-3 w-3 ml-1 text-primary" />}
+                    </Label>
+                    <Input
+                      id={`${vendedor}-percentage`}
+                      type="number"
+                      step="0.01"
+                      value={adj.percentage.toFixed(2)}
+                      onChange={(e) => handlePercentageChange(vendedor, e.target.value)}
+                      className={adj.fixedField === "percentage" ? "border-primary font-semibold" : ""}
+                    />
+                  </div>
+
+                  <div className="col-span-1 text-center">
+                    {adj.fixedField && <Lock className="h-4 w-4 text-primary mx-auto" title="Campo fijo" />}
+                  </div>
                 </div>
               );
             })}
           </div>
 
-          <div className="rounded-lg bg-muted/50 p-3 text-sm">
-            <p className="font-medium">Presupuesto Total por Vendedor:</p>
-            <div className="mt-2 space-y-1">
-              {vendedores.map((vendedor) => {
-                const value = adjustments[vendedor] || 0;
-                const budget = adjustmentType === "percentage"
-                  ? (presupuestoTotal * value) / 100
-                  : value;
-                
-                return (
-                  <div key={vendedor} className="flex justify-between">
-                    <span>{vendedor}:</span>
-                    <span className="font-semibold">
-                      ${budget.toLocaleString("es-ES", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      {adjustmentType === "percentage" && ` (${value.toFixed(2)}%)`}
-                    </span>
-                  </div>
-                );
-              })}
+          <div className="rounded-lg bg-muted/50 p-4 text-sm space-y-2">
+            <p className="font-medium text-foreground">Resumen de Distribución:</p>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Total Asignado:</span>
+                <span className="font-semibold">
+                  ${totalAmount.toLocaleString("es-ES", { minimumFractionDigits: 2 })}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Total Porcentaje:</span>
+                <span className="font-semibold">{totalPercentage.toFixed(2)}%</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Presupuesto Total:</span>
+                <span className="font-semibold">
+                  ${presupuestoTotal.toLocaleString("es-ES", { minimumFractionDigits: 2 })}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Vendedores Ajustados:</span>
+                <span className="font-semibold">
+                  {fixedVendors.size} de {vendedores.length}
+                </span>
+              </div>
             </div>
           </div>
         </div>

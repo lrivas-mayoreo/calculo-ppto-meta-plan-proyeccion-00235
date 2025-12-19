@@ -1,13 +1,6 @@
 import { useState, useEffect } from "react";
 import { Card } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -19,7 +12,8 @@ import * as XLSX from "xlsx";
 
 interface VendorClientTableProps {
   result: CalculationResult;
-  vendorAdjustments: Record<string, { value: number; type: "percentage" | "currency" }>;
+  vendorAdjustments: Record<string, { amount: number; percentage: number; fixedField: "amount" | "percentage" | null }>;
+
   presupuestoTotal: number;
   userRole: string | null;
   marcasPresupuesto: Array<{ marca: string; empresa: string; presupuesto: number; fechaDestino: string }>;
@@ -40,7 +34,15 @@ interface VendorClientData {
   key: string;
 }
 
-export const VendorClientTable = ({ result, vendorAdjustments, presupuestoTotal, userRole, marcasPresupuesto, userId, onBrandAdjustmentsChange }: VendorClientTableProps) => {
+export const VendorClientTable = ({
+  result,
+  vendorAdjustments,
+  presupuestoTotal,
+  userRole,
+  marcasPresupuesto,
+  userId,
+  onBrandAdjustmentsChange,
+}: VendorClientTableProps) => {
   const [vendorClientData, setVendorClientData] = useState<VendorClientData[]>([]);
   const [manualAdjustments, setManualAdjustments] = useState<Record<string, number>>({});
   const [brandAdjustments, setBrandAdjustments] = useState<Record<string, number>>({});
@@ -57,35 +59,33 @@ export const VendorClientTable = ({ result, vendorAdjustments, presupuestoTotal,
 
   const getPreviousMonth = (fechaDestino: string): string => {
     // Parse fecha in format YYYY/MM/DD and return the full previous month range
-    const parts = fechaDestino.split('/');
+    const parts = fechaDestino.split("/");
     const year = parseInt(parts[0]);
     const month = parseInt(parts[1]);
-    
+
     const date = new Date(year, month - 1, 1);
     date.setMonth(date.getMonth() - 1);
-    
+
     const prevYear = date.getFullYear();
-    const prevMonth = String(date.getMonth() + 1).padStart(2, '0');
-    
+    const prevMonth = String(date.getMonth() + 1).padStart(2, "0");
+
     // Return format YYYY/MM for querying all sales in that month
     return `${prevYear}/${prevMonth}`;
   };
 
   const loadPreviousMonthSales = async () => {
     const salesByKey: Record<string, number> = {};
-    
+
     // Get user session
-    const { data: { user } } = await supabase.auth.getUser();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
     if (!user) return;
-    
+
     console.log("=== DEBUG VENTAS MES ANTERIOR ===");
-    
+
     // Get user's role to filter data
-    const { data: userRole } = await supabase
-      .from("user_roles")
-      .select("role_id")
-      .eq("user_id", user.id)
-      .maybeSingle();
+    const { data: userRole } = await supabase.from("user_roles").select("role_id").eq("user_id", user.id).maybeSingle();
 
     const userRoleId = userRole?.role_id;
 
@@ -95,61 +95,67 @@ export const VendorClientTable = ({ result, vendorAdjustments, presupuestoTotal,
       supabase.from("clientes_per_role").select("cliente_id").eq("role_id", userRoleId),
     ]);
 
-    const allowedMarcaIds = allowedMarcasRes.data?.map(m => m.marca_id) || [];
-    const allowedClienteIds = allowedClientesRes.data?.map(c => c.cliente_id) || [];
+    const allowedMarcaIds = allowedMarcasRes.data?.map((m) => m.marca_id) || [];
+    const allowedClienteIds = allowedClientesRes.data?.map((c) => c.cliente_id) || [];
 
     // Load codes mappings filtered by role permissions
-    const clientsRes = allowedClienteIds.length > 0 
-      ? await supabase.from('clientes').select('nombre, codigo').in('id', allowedClienteIds)
-      : { data: [] as { nombre: string; codigo: string }[] };
-    const brandsRes = allowedMarcaIds.length > 0 
-      ? await supabase.from('marcas').select('nombre, codigo').in('id', allowedMarcaIds)
-      : { data: [] as { nombre: string; codigo: string }[] };
-    
+    const clientsRes =
+      allowedClienteIds.length > 0
+        ? await supabase.from("clientes").select("nombre, codigo").in("id", allowedClienteIds)
+        : { data: [] as { nombre: string; codigo: string }[] };
+    const brandsRes =
+      allowedMarcaIds.length > 0
+        ? await supabase.from("marcas").select("nombre, codigo").in("id", allowedMarcaIds)
+        : { data: [] as { nombre: string; codigo: string }[] };
+
     console.log("Clientes cargados:", clientsRes.data?.length || 0);
     console.log("Marcas cargadas:", brandsRes.data?.length || 0);
-    
-    const clientCodes = new Map<string, string>(clientsRes.data?.map(c => [c.nombre, c.codigo] as [string, string]) || []);
-    const brandCodes = new Map<string, string>(brandsRes.data?.map(b => [b.nombre, b.codigo] as [string, string]) || []);
-    
+
+    const clientCodes = new Map<string, string>(
+      clientsRes.data?.map((c) => [c.nombre, c.codigo] as [string, string]) || [],
+    );
+    const brandCodes = new Map<string, string>(
+      brandsRes.data?.map((b) => [b.nombre, b.codigo] as [string, string]) || [],
+    );
+
     for (const marca of result.resultadosMarcas) {
       const previousMonth = getPreviousMonth(marca.fechaDestino);
       const codigoMarca = brandCodes.get(marca.marca);
-      
+
       console.log(`Marca: ${marca.marca}, Mes anterior: ${previousMonth}, Código: ${codigoMarca}`);
-      
+
       if (!codigoMarca) {
         console.warn(`No se encontró código para marca: ${marca.marca}`);
         continue;
       }
-      
+
       // Get unique clients and vendors from this brand
       for (const distribucion of marca.distribucionClientes) {
         // distribucion.cliente is already a name from the calculation
         const clienteNombre = distribucion.cliente;
         const codigoCliente = clientCodes.get(clienteNombre);
         const key = `${distribucion.vendedor}-${clienteNombre}-${marca.marca}`;
-        
+
         if (!codigoCliente) {
           console.warn(`No se encontró código para cliente: ${clienteNombre}`);
           salesByKey[key] = 0;
           continue;
         }
-        
+
         console.log(`Consultando ventas: mes=${previousMonth}, marca=${codigoMarca}, cliente=${codigoCliente}`);
-        
+
         // Query ventas_reales for previous month
         const { data, error } = await supabase
-          .from('ventas_reales')
-          .select('monto')
-          .eq('mes', previousMonth)
-          .eq('codigo_marca', codigoMarca)
-          .eq('codigo_cliente', codigoCliente);
-        
+          .from("ventas_reales")
+          .select("monto")
+          .eq("mes", previousMonth)
+          .eq("codigo_marca", codigoMarca)
+          .eq("codigo_cliente", codigoCliente);
+
         if (error) {
           console.error("Error consultando ventas_reales:", error);
         }
-        
+
         if (data && data.length > 0) {
           const total = data.reduce((sum, sale) => sum + Number(sale.monto), 0);
           salesByKey[key] = total;
@@ -160,7 +166,7 @@ export const VendorClientTable = ({ result, vendorAdjustments, presupuestoTotal,
         }
       }
     }
-    
+
     console.log("=== RESUMEN VENTAS MES ANTERIOR ===", salesByKey);
     setPreviousMonthSales(salesByKey);
   };
@@ -170,15 +176,13 @@ export const VendorClientTable = ({ result, vendorAdjustments, presupuestoTotal,
 
     result.resultadosMarcas.forEach((marca) => {
       const totalBrandAdjustment = brandAdjustments[marca.marca] || 0;
-      
+
       // Calculate total brand budget (sum of all subtotals for this brand)
-      const totalBrandBudget = marca.distribucionClientes.reduce((sum, cliente) => 
-        sum + cliente.subtotal, 0
-      );
+      const totalBrandBudget = marca.distribucionClientes.reduce((sum, cliente) => sum + cliente.subtotal, 0);
 
       marca.distribucionClientes.forEach((cliente) => {
         const key = `${cliente.vendedor}-${cliente.cliente}-${marca.marca}`;
-        
+
         // Use the already calculated subtotal as presupuestoAsignado (Ppto Asociado)
         // This comes from the formula: Venta Promedio del Artículo × Factor
         const presupuestoAsignado = cliente.subtotal;
@@ -206,13 +210,7 @@ export const VendorClientTable = ({ result, vendorAdjustments, presupuestoTotal,
   };
 
   const getUniqueVendors = () => {
-    return Array.from(
-      new Set(
-        result.resultadosMarcas.flatMap((m) =>
-          m.distribucionClientes.map((c) => c.vendedor)
-        )
-      )
-    );
+    return Array.from(new Set(result.resultadosMarcas.flatMap((m) => m.distribucionClientes.map((c) => c.vendedor))));
   };
 
   const handleManualAdjustment = (key: string, value: string) => {
@@ -239,29 +237,25 @@ export const VendorClientTable = ({ result, vendorAdjustments, presupuestoTotal,
 
   const applyAdjustments = async () => {
     calculateVendorClientData();
-    
+
     // Save brand adjustments to database
     try {
-      const updates = marcasPresupuesto.map(mp => ({
+      const updates = marcasPresupuesto.map((mp) => ({
         user_id: userId,
         marca: mp.marca,
         empresa: mp.empresa,
         presupuesto: mp.presupuesto,
         fecha_destino: mp.fechaDestino,
         vendor_adjustments: { brandAdjustments },
-        role: (userRole as "administrador" | "gerente" | "admin_ventas") || 'administrador',
+        role: (userRole as "administrador" | "gerente" | "admin_ventas") || "administrador",
       }));
 
       // First delete existing entries for these brands
-      const marcasToUpdate = [...new Set(updates.map(u => u.marca))];
-      await supabase
-        .from('budgets')
-        .delete()
-        .eq('user_id', userId)
-        .in('marca', marcasToUpdate);
+      const marcasToUpdate = [...new Set(updates.map((u) => u.marca))];
+      await supabase.from("budgets").delete().eq("user_id", userId).in("marca", marcasToUpdate);
 
       // Then insert new values
-      const { error } = await supabase.from('budgets').insert(updates);
+      const { error } = await supabase.from("budgets").insert(updates);
 
       if (error) throw error;
       toast.success("Ajustes guardados exitosamente");
@@ -277,18 +271,18 @@ export const VendorClientTable = ({ result, vendorAdjustments, presupuestoTotal,
       Cliente: item.cliente,
       Empresa: item.empresa,
       Marca: item.marca,
-      'Presupuesto Base': item.presupuestoAsignado,
-      'Venta Mes Anterior': item.ventaMesAnterior,
-      'Ventas Reales': item.ventasReales,
-      'Ajuste Manual': item.ajusteManual,
-      'Ajuste Marca': item.ajusteMarca,
-      'Total': item.presupuestoAsignado + item.ajusteManual + item.ajusteMarca,
+      "Presupuesto Base": item.presupuestoAsignado,
+      "Venta Mes Anterior": item.ventaMesAnterior,
+      "Ventas Reales": item.ventasReales,
+      "Ajuste Manual": item.ajusteManual,
+      "Ajuste Marca": item.ajusteMarca,
+      Total: item.presupuestoAsignado + item.ajusteManual + item.ajusteMarca,
     }));
 
     const worksheet = XLSX.utils.json_to_sheet(exportData);
     const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Vendedores-Clientes');
-    XLSX.writeFile(workbook, `Reporte_Vendedores_Clientes_${new Date().toISOString().split('T')[0]}.xlsx`);
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Vendedores-Clientes");
+    XLSX.writeFile(workbook, `Reporte_Vendedores_Clientes_${new Date().toISOString().split("T")[0]}.xlsx`);
     toast.success("Reporte exportado exitosamente");
   };
 
@@ -298,14 +292,14 @@ export const VendorClientTable = ({ result, vendorAdjustments, presupuestoTotal,
 
   const applyVendorChange = () => {
     if (!editingVendor) return;
-    
-    const updatedData = vendorClientData.map(item => {
+
+    const updatedData = vendorClientData.map((item) => {
       if (item.key === editingVendor.key) {
         return { ...item, vendedor: editingVendor.newVendor };
       }
       return item;
     });
-    
+
     setVendorClientData(updatedData);
     setEditingVendor(null);
     toast.success("Vendedor actualizado exitosamente");
@@ -315,17 +309,23 @@ export const VendorClientTable = ({ result, vendorAdjustments, presupuestoTotal,
   const canEdit = userRole === "admin_ventas" || userRole === "administrador";
   const isReadOnly = userRole === "gerente";
 
-  const vendorTotals = vendorClientData.reduce((acc, item) => {
-    const current = acc[item.vendedor] || 0;
-    acc[item.vendedor] = current + item.presupuestoAsignado + item.ajusteManual + item.ajusteMarca;
-    return acc;
-  }, {} as Record<string, number>);
+  const vendorTotals = vendorClientData.reduce(
+    (acc, item) => {
+      const current = acc[item.vendedor] || 0;
+      acc[item.vendedor] = current + item.presupuestoAsignado + item.ajusteManual + item.ajusteMarca;
+      return acc;
+    },
+    {} as Record<string, number>,
+  );
 
-  const brandTotals = vendorClientData.reduce((acc, item) => {
-    const current = acc[item.marca] || 0;
-    acc[item.marca] = current + item.presupuestoAsignado + item.ajusteManual + item.ajusteMarca;
-    return acc;
-  }, {} as Record<string, number>);
+  const brandTotals = vendorClientData.reduce(
+    (acc, item) => {
+      const current = acc[item.marca] || 0;
+      acc[item.marca] = current + item.presupuestoAsignado + item.ajusteManual + item.ajusteMarca;
+      return acc;
+    },
+    {} as Record<string, number>,
+  );
 
   const grandTotal = Object.values(vendorTotals).reduce((sum, val) => sum + val, 0);
 
@@ -335,9 +335,7 @@ export const VendorClientTable = ({ result, vendorAdjustments, presupuestoTotal,
         <div className="flex items-center gap-2">
           <Users className="h-5 w-5 text-primary" />
           <h3 className="text-lg font-semibold">Vendedores y Clientes</h3>
-          {isReadOnly && (
-            <span className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded">Solo lectura</span>
-          )}
+          {isReadOnly && <span className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded">Solo lectura</span>}
         </div>
         <div className="flex gap-2">
           <Button onClick={exportToExcel} size="sm" variant="outline">
@@ -387,8 +385,10 @@ export const VendorClientTable = ({ result, vendorAdjustments, presupuestoTotal,
                         onChange={(e) => handleVendorChange(key, e.target.value)}
                         className="w-full rounded border border-input bg-background px-2 py-1 text-sm"
                       >
-                        {uniqueVendors.map(v => (
-                          <option key={v} value={v}>{v}</option>
+                        {uniqueVendors.map((v) => (
+                          <option key={v} value={v}>
+                            {v}
+                          </option>
                         ))}
                       </select>
                     ) : (
@@ -399,19 +399,22 @@ export const VendorClientTable = ({ result, vendorAdjustments, presupuestoTotal,
                   <TableCell>{item.empresa}</TableCell>
                   <TableCell>{item.marca}</TableCell>
                   <TableCell className="text-right">
-                    ${item.presupuestoAsignado.toLocaleString("es-ES", {
+                    $
+                    {item.presupuestoAsignado.toLocaleString("es-ES", {
                       minimumFractionDigits: 2,
                       maximumFractionDigits: 2,
                     })}
                   </TableCell>
                   <TableCell className="text-right">
-                    ${item.ventaMesAnterior.toLocaleString("es-ES", {
+                    $
+                    {item.ventaMesAnterior.toLocaleString("es-ES", {
                       minimumFractionDigits: 2,
                       maximumFractionDigits: 2,
                     })}
                   </TableCell>
                   <TableCell className="text-right">
-                    ${item.ventasReales.toLocaleString("es-ES", {
+                    $
+                    {item.ventasReales.toLocaleString("es-ES", {
                       minimumFractionDigits: 2,
                       maximumFractionDigits: 2,
                     })}
@@ -426,20 +429,25 @@ export const VendorClientTable = ({ result, vendorAdjustments, presupuestoTotal,
                         className="w-32 text-right"
                       />
                     ) : (
-                      <span>${(manualAdjustments[key] || 0).toLocaleString("es-ES", {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2,
-                      })}</span>
+                      <span>
+                        $
+                        {(manualAdjustments[key] || 0).toLocaleString("es-ES", {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })}
+                      </span>
                     )}
                   </TableCell>
                   <TableCell className="text-right">
-                    ${item.ajusteMarca.toLocaleString("es-ES", {
+                    $
+                    {item.ajusteMarca.toLocaleString("es-ES", {
                       minimumFractionDigits: 2,
                       maximumFractionDigits: 2,
                     })}
                   </TableCell>
                   <TableCell className="text-right font-semibold">
-                    ${total.toLocaleString("es-ES", {
+                    $
+                    {total.toLocaleString("es-ES", {
                       minimumFractionDigits: 2,
                       maximumFractionDigits: 2,
                     })}
@@ -486,7 +494,8 @@ export const VendorClientTable = ({ result, vendorAdjustments, presupuestoTotal,
           <div key={vendedor} className="flex justify-between text-sm">
             <span>{vendedor}:</span>
             <span className="font-semibold">
-              ${total.toLocaleString("es-ES", {
+              $
+              {total.toLocaleString("es-ES", {
                 minimumFractionDigits: 2,
                 maximumFractionDigits: 2,
               })}
@@ -496,7 +505,8 @@ export const VendorClientTable = ({ result, vendorAdjustments, presupuestoTotal,
         <div className="mt-3 flex justify-between border-t pt-3 text-base font-bold">
           <span>Total General:</span>
           <span>
-            ${grandTotal.toLocaleString("es-ES", {
+            $
+            {grandTotal.toLocaleString("es-ES", {
               minimumFractionDigits: 2,
               maximumFractionDigits: 2,
             })}

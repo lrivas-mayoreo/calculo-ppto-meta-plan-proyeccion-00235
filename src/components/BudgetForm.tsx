@@ -34,7 +34,10 @@ interface BudgetFormProps {
     empresa: string;
     venta: number;
   }>;
-  vendorAdjustments?: Record<string, { value: number; type: "percentage" | "currency" }>;
+  vendorAdjustments?: Record<
+    string,
+    { amount: number; percentage: number; fixedField: "amount" | "percentage" | null }
+  >;
   brandAdjustments?: Record<string, number>;
   presupuestoTotal?: number;
 }
@@ -55,13 +58,19 @@ export const BudgetForm = ({
   const [mesesReferencia, setMesesReferencia] = useState<string[]>([]);
   const [marcasPresupuesto, setMarcasPresupuesto] = useState<MarcaPresupuesto[]>([]);
   const [marcasConError, setMarcasConError] = useState<
-    Array<{ 
-      marca: string; 
-      fechaDestino: string; 
-      empresa: string; 
-      presupuesto: number; 
+    Array<{
+      marca: string;
+      fechaDestino: string;
+      empresa: string;
+      presupuesto: number;
       error: string;
-      tipoError: 'marca_invalida' | 'empresa_invalida' | 'fecha_invalida' | 'presupuesto_invalido' | 'datos_incompletos' | 'sin_datos_ventas';
+      tipoError:
+        | "marca_invalida"
+        | "empresa_invalida"
+        | "fecha_invalida"
+        | "presupuesto_invalido"
+        | "datos_incompletos"
+        | "sin_datos_ventas";
       sugerencia?: string;
     }>
   >([]);
@@ -77,23 +86,23 @@ export const BudgetForm = ({
       setMesesReferencia([]);
       return;
     }
-    
+
     // If only one is set, use same value for both
     const inicio = mesInicio || mesFin;
     const fin = mesFin || mesInicio;
-    
+
     const startIdx = mesesDisponibles.indexOf(inicio);
     const endIdx = mesesDisponibles.indexOf(fin);
-    
+
     if (startIdx === -1 || endIdx === -1) {
       setMesesReferencia([]);
       return;
     }
-    
+
     // mesesDisponibles is ordered from newest to oldest, so we need to handle range correctly
     const minIdx = Math.min(startIdx, endIdx);
     const maxIdx = Math.max(startIdx, endIdx);
-    
+
     const selectedMeses = mesesDisponibles.slice(minIdx, maxIdx + 1);
     setMesesReferencia(selectedMeses);
   }, [mesInicio, mesFin, mesesDisponibles]);
@@ -123,7 +132,7 @@ export const BudgetForm = ({
     if (!file) return;
 
     console.log("📁 Excel upload - Marcas disponibles:", mockData.marcas.length, mockData.marcas.slice(0, 5));
-    
+
     if (mockData.marcas.length === 0) {
       toast.error("Espere a que se carguen las marcas de la base de datos antes de cargar el Excel");
       e.target.value = "";
@@ -185,7 +194,13 @@ export const BudgetForm = ({
           empresa: string;
           presupuesto: number;
           error: string;
-          tipoError: 'marca_invalida' | 'empresa_invalida' | 'fecha_invalida' | 'presupuesto_invalido' | 'datos_incompletos' | 'sin_datos_ventas';
+          tipoError:
+            | "marca_invalida"
+            | "empresa_invalida"
+            | "fecha_invalida"
+            | "presupuesto_invalido"
+            | "datos_incompletos"
+            | "sin_datos_ventas";
           sugerencia?: string;
         }> = [];
         let detectedFormat = "";
@@ -216,8 +231,8 @@ export const BudgetForm = ({
                 empresa: empresa || "Sin empresa",
                 presupuesto: presupuesto || 0,
                 error: `Presupuesto inválido: "${presupuestoRaw}"`,
-                tipoError: 'presupuesto_invalido',
-                sugerencia: 'El presupuesto debe ser un número positivo sin símbolos'
+                tipoError: "presupuesto_invalido",
+                sugerencia: "El presupuesto debe ser un número positivo sin símbolos",
               });
             }
             return;
@@ -232,8 +247,8 @@ export const BudgetForm = ({
                 empresa: empresa || "Sin empresa",
                 presupuesto: presupuesto || 0,
                 error: `Formato de fecha inválido: "${fechaRaw}"`,
-                tipoError: 'fecha_invalida',
-                sugerencia: 'Use formato YYYY/MM/DD, DD/MM/YYYY o YYYY-MM-DD'
+                tipoError: "fecha_invalida",
+                sugerencia: "Use formato YYYY/MM/DD, DD/MM/YYYY o YYYY-MM-DD",
               });
             }
             return;
@@ -247,27 +262,25 @@ export const BudgetForm = ({
               empresa: empresa || "Sin empresa",
               presupuesto,
               error: "Datos incompletos",
-              tipoError: 'datos_incompletos',
-              sugerencia: 'Todas las columnas deben tener valores'
+              tipoError: "datos_incompletos",
+              sugerencia: "Todas las columnas deben tener valores",
             });
             return;
           }
 
           // Validar que la marca exista en el maestro (check both codigo and nombre, case-insensitive)
-          let marcaEncontrada = mockData.marcas.find(
-            m => m.toLowerCase().trim() === marca.toLowerCase().trim()
-          );
-          
+          let marcaEncontrada = mockData.marcas.find((m) => m.toLowerCase().trim() === marca.toLowerCase().trim());
+
           // Also check by codigo if marcasConCodigo is available
           if (!marcaEncontrada && mockData.marcasConCodigo) {
             const marcaPorCodigo = mockData.marcasConCodigo.find(
-              m => m.codigo.toLowerCase().trim() === marca.toLowerCase().trim()
+              (m) => m.codigo.toLowerCase().trim() === marca.toLowerCase().trim(),
             );
             if (marcaPorCodigo) {
               marcaEncontrada = marcaPorCodigo.nombre;
             }
           }
-          
+
           if (!marcaEncontrada) {
             console.log("❌ Marca no encontrada:", marca, "Disponibles:", mockData.marcas.slice(0, 5));
             errores.push({
@@ -276,15 +289,15 @@ export const BudgetForm = ({
               empresa,
               presupuesto,
               error: `Marca "${marca}" no existe en el maestro`,
-              tipoError: 'marca_invalida',
-              sugerencia: `Verifique que la marca esté registrada. Ejemplo: ${mockData.marcas[0] || 'N/A'}`
+              tipoError: "marca_invalida",
+              sugerencia: `Verifique que la marca esté registrada. Ejemplo: ${mockData.marcas[0] || "N/A"}`,
             });
             return;
           }
 
           // Validar que la empresa exista en el maestro (case-insensitive)
           const empresaEncontrada = mockData.empresas.find(
-            e => e.toLowerCase().trim() === empresa.toLowerCase().trim()
+            (e) => e.toLowerCase().trim() === empresa.toLowerCase().trim(),
           );
           if (!empresaEncontrada) {
             errores.push({
@@ -293,18 +306,19 @@ export const BudgetForm = ({
               empresa,
               presupuesto,
               error: `Empresa "${empresa}" no existe en el sistema`,
-              tipoError: 'empresa_invalida',
-              sugerencia: `Empresas válidas: ${mockData.empresas.join(', ')}`
+              tipoError: "empresa_invalida",
+              sugerencia: `Empresas válidas: ${mockData.empresas.join(", ")}`,
             });
             return;
           }
 
           // Verificar si la marca tiene datos de ventas en los meses de referencia
           const ventasDeMarca = ventasData.filter(
-            v => v.marca.toLowerCase().trim() === marcaEncontrada!.toLowerCase().trim() &&
-                 v.empresa.toLowerCase().trim() === empresaEncontrada.toLowerCase().trim()
+            (v) =>
+              v.marca.toLowerCase().trim() === marcaEncontrada!.toLowerCase().trim() &&
+              v.empresa.toLowerCase().trim() === empresaEncontrada.toLowerCase().trim(),
           );
-          
+
           if (ventasDeMarca.length === 0) {
             errores.push({
               marca: marcaEncontrada!,
@@ -312,8 +326,9 @@ export const BudgetForm = ({
               empresa: empresaEncontrada,
               presupuesto,
               error: `Sin datos de ventas históricos`,
-              tipoError: 'sin_datos_ventas',
-              sugerencia: 'No se encontraron ventas para esta marca/empresa en los meses disponibles. El presupuesto se cargará pero no se podrá distribuir automáticamente.'
+              tipoError: "sin_datos_ventas",
+              sugerencia:
+                "No se encontraron ventas para esta marca/empresa en los meses disponibles. El presupuesto se cargará pero no se podrá distribuir automáticamente.",
             });
           }
 
@@ -434,16 +449,16 @@ export const BudgetForm = ({
               mesesDisponibles={mesesDisponibles}
               ventasData={ventasData}
               onApplySuggestion={(marcas, mesesReferencia) => {
-                console.log('🎯 Aplicando presupuesto sugerido:', { 
-                  marcasCount: marcas.length, 
-                  mesesReferenciaCount: mesesReferencia.length 
+                console.log("🎯 Aplicando presupuesto sugerido:", {
+                  marcasCount: marcas.length,
+                  mesesReferenciaCount: mesesReferencia.length,
                 });
                 setMarcasPresupuesto(marcas);
                 setMesesReferencia(mesesReferencia);
                 onMarcasPresupuestoLoad(marcas);
                 // Automatically trigger calculation with the suggested budget
                 setTimeout(() => {
-                  console.log('🔄 Iniciando cálculo automático de distribución...');
+                  console.log("🔄 Iniciando cálculo automático de distribución...");
                   onCalculate(marcas, mesesReferencia);
                   toast.success("Distribución calculada automáticamente por marca, vendedor, cliente y artículo");
                 }, 100);
@@ -596,7 +611,7 @@ export const BudgetForm = ({
       {/* === Meses de Referencia (2 selects: inicio y fin) === */}
       <div className="space-y-3">
         <Label>Meses de Referencia *</Label>
-        
+
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-2">
             <Label className="text-sm text-muted-foreground">Mes Inicio</Label>
@@ -613,7 +628,7 @@ export const BudgetForm = ({
               </SelectContent>
             </Select>
           </div>
-          
+
           <div className="space-y-2">
             <Label className="text-sm text-muted-foreground">Mes Fin</Label>
             <Select value={mesFin} onValueChange={handleMesFinChange}>
@@ -633,9 +648,7 @@ export const BudgetForm = ({
 
         {mesesReferencia.length > 0 && (
           <div className="flex items-center justify-between text-sm">
-            <span className="text-muted-foreground">
-              Rango seleccionado: {mesesReferencia.length} mes(es)
-            </span>
+            <span className="text-muted-foreground">Rango seleccionado: {mesesReferencia.length} mes(es)</span>
             <Button
               type="button"
               variant="ghost"
@@ -678,17 +691,15 @@ export const BudgetForm = ({
                   </TableHeader>
                   <TableBody>
                     {Object.entries(vendorAdjustments).map(([vendor, adj]) => {
-                      const budget = adj.type === "percentage" ? (presupuestoTotal * adj.value) / 100 : adj.value;
                       return (
                         <TableRow key={vendor}>
-                          <TableCell className="font-medium">{vendor}</TableCell>
-                          <TableCell className="text-right">
-                            {adj.type === "percentage"
-                              ? `${adj.value.toFixed(2)}%`
-                              : `$${adj.value.toLocaleString("es-ES", { minimumFractionDigits: 2 })}`}
+                          <TableCell className="font-medium">
+                            {vendor}
+                            {adj.fixedField && <span className="ml-2 text-xs text-primary">(Ajustado)</span>}
                           </TableCell>
+                          <TableCell className="text-right">{adj.percentage.toFixed(2)}%</TableCell>
                           <TableCell className="text-right">
-                            ${budget.toLocaleString("es-ES", { minimumFractionDigits: 2 })}
+                            ${adj.amount.toLocaleString("es-ES", { minimumFractionDigits: 2 })}
                           </TableCell>
                         </TableRow>
                       );
