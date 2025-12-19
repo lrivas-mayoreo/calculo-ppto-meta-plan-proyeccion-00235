@@ -429,105 +429,206 @@ const Index = () => {
       return result;
     }
 
-    console.log("🔧 Aplicando ajustes de vendedor...", vendorAdjustments);
+    console.log("🔧 Aplicando ajustes de vendedor con lógica correcta...", vendorAdjustments);
 
-    // Crear copia profunda del resultado para no mutar el original
+    // Crear copia profunda del resultado
     const resultadoAjustado: CalculationResult = {
       ...result,
       resultadosMarcas: result.resultadosMarcas.map((marca) => ({
         ...marca,
-        distribucionClientes: [...marca.distribucionClientes],
+        distribucionClientes: marca.distribucionClientes.map((c) => ({ ...c, articulos: [...c.articulos] })),
       })),
     };
 
-    // Para cada vendedor con ajuste
-    Object.entries(vendorAdjustments).forEach(([vendedor, ajuste]) => {
-      console.log(`📊 Procesando ajuste para vendedor: ${vendedor}, monto: $${ajuste.amount}`);
+    // Identificar vendedores fijos
+    const vendoresFijos = new Set(
+      Object.entries(vendorAdjustments)
+        .filter(([_, adj]) => adj.fixedField !== null)
+        .map(([vendedor, _]) => vendedor),
+    );
 
-      // 1. Recolectar todos los clientes de este vendedor a través de todas las marcas
-      const clientesDelVendedor: Array<{
-        marcaIndex: number;
-        clienteIndex: number;
-        cliente: string;
-        presupuestoActual: number;
-        ventasHistoricas: number;
-      }> = [];
+    console.log("� Vendedores fijos:", Array.from(vendoresFijos));
 
-      resultadoAjustado.resultadosMarcas.forEach((marca, marcaIndex) => {
-        marca.distribucionClientes.forEach((cliente, clienteIndex) => {
-          if (cliente.vendedor === vendedor) {
-            // Calcular ventas históricas de este cliente
-            const ventasCliente = ventasTransformadas
-              .filter(
-                (v) =>
-                  v.vendedor === vendedor &&
-                  v.cliente === cliente.cliente &&
-                  v.marca === marca.marca &&
-                  mesesReferencia.includes(v.mesAnio),
-              )
-              .reduce((sum, v) => sum + v.venta, 0);
+    // PASO 1: Para cada vendedor fijo, redistribuir su presupuesto entre sus marcas
+    vendoresFijos.forEach((vendedor) => {
+      const ajuste = vendorAdjustments[vendedor];
+      console.log(`\n📊 Procesando vendedor fijo: ${vendedor}, presupuesto ajustado: $${ajuste.amount.toFixed(2)}`);
 
-            clientesDelVendedor.push({
-              marcaIndex,
-              clienteIndex,
-              cliente: cliente.cliente,
-              presupuestoActual: cliente.subtotal,
-              ventasHistoricas: ventasCliente,
-            });
+      // Calcular ventas históricas del vendedor por marca
+      const ventasPorMarca = new Map<string, number>();
+
+      ventasTransformadas
+        .filter((v) => v.vendedor === vendedor && mesesReferencia.includes(v.mesAnio))
+        .forEach((venta) => {
+          const actual = ventasPorMarca.get(venta.marca) || 0;
+          ventasPorMarca.set(venta.marca, actual + venta.venta);
+        });
+
+      const totalVentasVendedor = Array.from(ventasPorMarca.values()).reduce((sum, v) => sum + v, 0);
+
+      if (totalVentasVendedor === 0) {
+        console.warn(`⚠️ Vendedor ${vendedor} no tiene ventas históricas`);
+        return;
+      }
+
+      // Redistribuir presupuesto del vendedor entre sus marcas proporcionalmente
+      ventasPorMarca.forEach((ventasMarca, nombreMarca) => {
+        const porcentajeMarca = ventasMarca / totalVentasVendedor;
+        const presupuestoVendedorEnMarca = ajuste.amount * porcentajeMarca;
+
+        console.log(
+          `  → Marca: ${nombreMarca}, % histórico: ${(porcentajeMarca * 100).toFixed(2)}%, presupuesto: $${presupuestoVendedorEnMarca.toFixed(2)}`,
+        );
+
+        // Encontrar la marca en el resultado y actualizar el vendedor
+        const marcaIndex = resultadoAjustado.resultadosMarcas.findIndex((m) => m.marca === nombreMarca);
+        if (marcaIndex === -1) return;
+
+        const marca = resultadoAjustado.resultadosMarcas[marcaIndex];
+        const clientesDelVendedor = marca.distribucionClientes.filter((c) => c.vendedor === vendedor);
+
+        // Calcular ventas históricas de los clientes de este vendedor en esta marca
+        const ventasPorCliente = new Map<string, number>();
+        ventasTransformadas
+          .filter((v) => v.vendedor === vendedor && v.marca === nombreMarca && mesesReferencia.includes(v.mesAnio))
+          .forEach((venta) => {
+            const actual = ventasPorCliente.get(venta.cliente) || 0;
+            ventasPorCliente.set(venta.cliente, actual + venta.venta);
+          });
+
+        const totalVentasClientes = Array.from(ventasPorCliente.values()).reduce((sum, v) => sum + v, 0);
+
+        // Redistribuir entre clientes proporcionalmente
+        clientesDelVendedor.forEach((cliente) => {
+          const ventasCliente = ventasPorCliente.get(cliente.cliente) || 0;
+          const porcentajeCliente = totalVentasClientes > 0 ? ventasCliente / totalVentasClientes : 0;
+          const nuevoPresupuesto = presupuestoVendedorEnMarca * porcentajeCliente;
+
+          const clienteIndex = marca.distribucionClientes.findIndex(
+            (c) => c.vendedor === vendedor && c.cliente === cliente.cliente,
+          );
+
+          if (clienteIndex !== -1) {
+            const presupuestoAnterior = marca.distribucionClientes[clienteIndex].subtotal;
+            const factorAjuste = presupuestoAnterior > 0 ? nuevoPresupuesto / presupuestoAnterior : 1;
+            marca.distribucionClientes[clienteIndex].subtotal = nuevoPresupuesto;
+            marca.distribucionClientes[clienteIndex].articulos = marca.distribucionClientes[clienteIndex].articulos.map(
+              (art) => ({
+                ...art,
+                ventaAjustada: art.ventaAjustada * factorAjuste,
+                variacion: art.ventaAjustada * factorAjuste - art.ventaReal,
+              }),
+            );
           }
         });
       });
-
-      if (clientesDelVendedor.length === 0) {
-        console.warn(`⚠️ No se encontraron clientes para el vendedor: ${vendedor}`);
-        return;
-      }
-
-      // 2. Calcular total de ventas históricas del vendedor
-      const totalVentasVendedor = clientesDelVendedor.reduce((sum, c) => sum + c.ventasHistoricas, 0);
-
-      if (totalVentasVendedor === 0) {
-        console.warn(`⚠️ El vendedor ${vendedor} no tiene ventas históricas`);
-        return;
-      }
-
-      // 3. Redistribuir el presupuesto ajustado proporcionalmente
-      clientesDelVendedor.forEach((clienteInfo) => {
-        const porcentajeCliente = clienteInfo.ventasHistoricas / totalVentasVendedor;
-        const nuevoPresupuesto = ajuste.amount * porcentajeCliente;
-
-        console.log(
-          `  → Cliente: ${clienteInfo.cliente}, % histórico: ${(porcentajeCliente * 100).toFixed(2)}%, nuevo presupuesto: $${nuevoPresupuesto.toFixed(2)}`,
-        );
-
-        // Actualizar el subtotal del cliente en el resultado
-        const marca = resultadoAjustado.resultadosMarcas[clienteInfo.marcaIndex];
-        const cliente = marca.distribucionClientes[clienteInfo.clienteIndex];
-
-        // Actualizar subtotal
-        cliente.subtotal = nuevoPresupuesto;
-
-        // Actualizar también los artículos proporcionalmente
-        const factorAjuste = nuevoPresupuesto / clienteInfo.presupuestoActual;
-        cliente.articulos = cliente.articulos.map((art) => ({
-          ...art,
-          ventaAjustada: art.ventaAjustada * factorAjuste,
-          variacion: art.ventaAjustada * factorAjuste - art.ventaReal,
-        }));
-      });
-
-      console.log(`✅ Ajuste aplicado para vendedor: ${vendedor}`);
     });
 
-    // Recalcular totales
-    const nuevoTotalPresupuesto = resultadoAjustado.resultadosMarcas.reduce(
-      (sum, marca) => sum + marca.distribucionClientes.reduce((s, c) => s + c.subtotal, 0),
-      0,
-    );
+    // PASO 2: Para cada marca, redistribuir el presupuesto restante entre vendedores no fijos
+    resultadoAjustado.resultadosMarcas.forEach((marca, marcaIndex) => {
+      console.log(`\n🏷️  Procesando Marca: ${marca.marca}, presupuesto total: $${marca.presupuesto.toFixed(2)}`);
 
-    resultadoAjustado.totalPresupuesto = nuevoTotalPresupuesto;
+      // Calcular presupuesto usado por vendedores fijos en esta marca
+      const presupuestoFijos = marca.distribucionClientes
+        .filter((c) => vendoresFijos.has(c.vendedor))
+        .reduce((sum, c) => sum + c.subtotal, 0);
 
-    console.log(`💰 Nuevo total presupuesto después de ajustes: $${nuevoTotalPresupuesto.toFixed(2)}`);
+      const presupuestoRestante = marca.presupuesto - presupuestoFijos;
+
+      console.log(
+        `  💰 Presupuesto fijos: $${presupuestoFijos.toFixed(2)}, restante: $${presupuestoRestante.toFixed(2)}`,
+      );
+
+      if (presupuestoRestante <= 0) {
+        console.log(`  ⚠️ No hay presupuesto restante para vendedores no fijos`);
+        return;
+      }
+
+      // Obtener vendedores no fijos de esta marca
+      const vendedoresNoFijos = marca.distribucionClientes
+        .filter((c) => !vendoresFijos.has(c.vendedor))
+        .map((c) => c.vendedor);
+
+      const vendedoresNoFijosUnicos = Array.from(new Set(vendedoresNoFijos));
+
+      if (vendedoresNoFijosUnicos.length === 0) {
+        console.log(`  ℹ️ No hay vendedores no fijos en esta marca`);
+        return;
+      }
+
+      // Calcular ventas históricas de vendedores no fijos en esta marca
+      const ventasPorVendedor = new Map<string, number>();
+
+      ventasTransformadas
+        .filter(
+          (v) =>
+            v.marca === marca.marca &&
+            vendedoresNoFijosUnicos.includes(v.vendedor) &&
+            mesesReferencia.includes(v.mesAnio),
+        )
+        .forEach((venta) => {
+          const actual = ventasPorVendedor.get(venta.vendedor) || 0;
+          ventasPorVendedor.set(venta.vendedor, actual + venta.venta);
+        });
+
+      const totalVentasNoFijos = Array.from(ventasPorVendedor.values()).reduce((sum, v) => sum + v, 0);
+
+      if (totalVentasNoFijos === 0) {
+        console.warn(`  ⚠️ Vendedores no fijos no tienen ventas históricas en ${marca.marca}`);
+        return;
+      }
+
+      // Redistribuir presupuesto restante entre vendedores no fijos proporcionalmente
+      vendedoresNoFijosUnicos.forEach((vendedor) => {
+        const ventasVendedor = ventasPorVendedor.get(vendedor) || 0;
+        const porcentajeVendedor = ventasVendedor / totalVentasNoFijos;
+        const presupuestoVendedor = presupuestoRestante * porcentajeVendedor;
+
+        console.log(
+          `  → Vendedor no fijo: ${vendedor}, % histórico: ${(porcentajeVendedor * 100).toFixed(2)}%, presupuesto: $${presupuestoVendedor.toFixed(2)}`,
+        );
+
+        // Obtener clientes de este vendedor en esta marca
+        const clientesDelVendedor = marca.distribucionClientes.filter((c) => c.vendedor === vendedor);
+
+        // Calcular ventas históricas por cliente
+        const ventasPorCliente = new Map<string, number>();
+        ventasTransformadas
+          .filter((v) => v.vendedor === vendedor && v.marca === marca.marca && mesesReferencia.includes(v.mesAnio))
+          .forEach((venta) => {
+            const actual = ventasPorCliente.get(venta.cliente) || 0;
+            ventasPorCliente.set(venta.cliente, actual + venta.venta);
+          });
+
+        const totalVentasClientes = Array.from(ventasPorCliente.values()).reduce((sum, v) => sum + v, 0);
+
+        // Redistribuir entre clientes
+        clientesDelVendedor.forEach((cliente) => {
+          const ventasCliente = ventasPorCliente.get(cliente.cliente) || 0;
+          const porcentajeCliente = totalVentasClientes > 0 ? ventasCliente / totalVentasClientes : 0;
+          const nuevoPresupuesto = presupuestoVendedor * porcentajeCliente;
+
+          const clienteIndex = marca.distribucionClientes.findIndex(
+            (c) => c.vendedor === vendedor && c.cliente === cliente.cliente,
+          );
+
+          if (clienteIndex !== -1) {
+            const presupuestoAnterior = marca.distribucionClientes[clienteIndex].subtotal;
+            const factorAjuste = presupuestoAnterior > 0 ? nuevoPresupuesto / presupuestoAnterior : 1;
+            marca.distribucionClientes[clienteIndex].subtotal = nuevoPresupuesto;
+            marca.distribucionClientes[clienteIndex].articulos = marca.distribucionClientes[clienteIndex].articulos.map(
+              (art) => ({
+                ...art,
+                ventaAjustada: art.ventaAjustada * factorAjuste,
+                variacion: art.ventaAjustada * factorAjuste - art.ventaReal,
+              }),
+            );
+          }
+        });
+      });
+    });
+
+    console.log("✅ Ajustes aplicados correctamente");
 
     return resultadoAjustado;
   };
@@ -1028,6 +1129,7 @@ const Index = () => {
                           marcasPresupuesto={marcasPresupuesto}
                           userId={user.id}
                           userRole={userRole}
+                          result={result}
                         />
                       </Card>
                     )}
@@ -1143,6 +1245,7 @@ const Index = () => {
                             marcasPresupuesto={marcasPresupuesto}
                             userId={user.id}
                             userRole={userRole}
+                            result={result}
                           />
                         </Card>
                       )}

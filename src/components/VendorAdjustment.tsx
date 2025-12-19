@@ -29,6 +29,7 @@ interface VendorAdjustmentProps {
   marcasPresupuesto: Array<{ marca: string; empresa: string; presupuesto: number; fechaDestino: string }>;
   userId: string;
   userRole: string | null;
+  result: any; // Resultado actual del cálculo
 }
 
 export const VendorAdjustment = ({
@@ -38,22 +39,35 @@ export const VendorAdjustment = ({
   marcasPresupuesto,
   userId,
   userRole,
+  result,
 }: VendorAdjustmentProps) => {
   const [open, setOpen] = useState(false);
   const [adjustments, setAdjustments] = useState<Record<string, VendorAdjustment>>({});
   const [fixedVendors, setFixedVendors] = useState<Set<string>>(new Set());
 
-  // Initialize with equal distribution
+  // Initialize with current situation (not equal distribution)
   useEffect(() => {
-    if (vendedores.length > 0 && presupuestoTotal > 0) {
-      const equalAmount = presupuestoTotal / vendedores.length;
-      const equalPercentage = 100 / vendedores.length;
-
+    if (vendedores.length > 0 && presupuestoTotal > 0 && result) {
       const initialAdjustments: Record<string, VendorAdjustment> = {};
-      vendedores.forEach((v) => {
-        initialAdjustments[v] = {
-          amount: equalAmount,
-          percentage: equalPercentage,
+
+      // Calculate current budget for each vendor from result
+      vendedores.forEach((vendedor) => {
+        let totalVendedor = 0;
+
+        // Sum all clients of this vendor across all brands
+        result.resultadosMarcas?.forEach((marca: any) => {
+          marca.distribucionClientes?.forEach((cliente: any) => {
+            if (cliente.vendedor === vendedor) {
+              totalVendedor += cliente.subtotal || 0;
+            }
+          });
+        });
+
+        const percentage = presupuestoTotal > 0 ? (totalVendedor / presupuestoTotal) * 100 : 0;
+
+        initialAdjustments[vendedor] = {
+          amount: totalVendedor,
+          percentage: percentage,
           fixedField: null,
         };
       });
@@ -61,7 +75,7 @@ export const VendorAdjustment = ({
       setAdjustments(initialAdjustments);
       setFixedVendors(new Set());
     }
-  }, [vendedores, presupuestoTotal]);
+  }, [vendedores, presupuestoTotal, result]);
 
   const handleAmountChange = (vendedor: string, value: string) => {
     const numValue = parseFloat(value) || 0;
