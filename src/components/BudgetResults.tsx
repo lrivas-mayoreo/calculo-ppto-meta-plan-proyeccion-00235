@@ -64,13 +64,21 @@ export const BudgetResults = ({ result }: BudgetResultsProps) => {
 
   const totalPresupuesto = result.totalPresupuesto;
 
+  // Calcular total filtrado real (no el presupuesto general)
+  const totalFiltrado = resultadosFiltrados.reduce((sum, marca) => {
+    return sum + marca.distribucionClientes.reduce((clientSum, cliente) => clientSum + cliente.subtotal, 0);
+  }, 0);
+
+  // Solo mostrar KPI de vendedor si hay exactamente 1 vendedor seleccionado
+  const vendedorUnico = filtroVendedor !== "all" ? filtroVendedor : null;
+
   return (
     <div className="space-y-6">
-      {/* KPI Cards */}
+      {/* KPI Cards - solo mostrar KPI de vendedor si hay 1 seleccionado */}
       <BudgetKPICards
         resultadosFiltrados={resultadosFiltrados}
-        totalPresupuesto={totalPresupuesto}
-        vendedorFiltrado={filtroVendedor !== "todos" ? filtroVendedor : null}
+        totalPresupuesto={totalFiltrado}
+        vendedorFiltrado={vendedorUnico}
         totalPresupuestoGeneral={result.totalPresupuesto}
       />
 

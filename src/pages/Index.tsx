@@ -14,6 +14,7 @@ import { DataImport } from "@/components/DataImport";
 import { CSVImport } from "@/components/CSVImport";
 import { VendorBudgetView } from "@/components/VendorBudgetView";
 import { Calculator, TrendingUp, Calendar, Users, LogOut, Shield } from "lucide-react";
+import { ErrorsDetailCard } from "@/components/ErrorsDetailCard";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
@@ -1216,13 +1217,7 @@ const Index = () => {
                             trend="neutral"
                             subtitle="Meses referencia"
                           />
-                          <MetricsCard
-                            title="Errores"
-                            value={result.errores.length.toString()}
-                            icon={Users}
-                            trend={result.errores.length > 0 ? "negative" : "positive"}
-                            subtitle="Marcas con error"
-                          />
+                          <ErrorsDetailCard errores={result.errores} />
                         </div>
 
                         <BudgetResults result={result} />
@@ -1332,13 +1327,7 @@ const Index = () => {
                             trend="neutral"
                             subtitle="Meses referencia"
                           />
-                          <MetricsCard
-                            title="Errores"
-                            value={result.errores.length.toString()}
-                            icon={Users}
-                            trend={result.errores.length > 0 ? "negative" : "positive"}
-                            subtitle="Marcas con error"
-                          />
+                          <ErrorsDetailCard errores={result.errores} />
                         </div>
 
                         <BudgetResults result={result} />
