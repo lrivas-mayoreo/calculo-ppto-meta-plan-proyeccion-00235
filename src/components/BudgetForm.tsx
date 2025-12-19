@@ -690,20 +690,27 @@ export const BudgetForm = ({
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {Object.entries(vendorAdjustments).map(([vendor, adj]) => {
-                      return (
-                        <TableRow key={vendor}>
-                          <TableCell className="font-medium">
-                            {vendor}
-                            {adj.fixedField && <span className="ml-2 text-xs text-primary">(Ajustado)</span>}
-                          </TableCell>
-                          <TableCell className="text-right">{adj.percentage.toFixed(2)}%</TableCell>
-                          <TableCell className="text-right">
-                            ${adj.amount.toLocaleString("es-ES", { minimumFractionDigits: 2 })}
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
+                    {Object.entries(vendorAdjustments)
+                      .map(([vendor, adj]) => {
+                        // Validar que adj existe y tiene las propiedades necesarias
+                        if (!adj || typeof adj.percentage === "undefined" || typeof adj.amount === "undefined") {
+                          return null;
+                        }
+
+                        return (
+                          <TableRow key={vendor}>
+                            <TableCell className="font-medium">
+                              {vendor}
+                              {adj.fixedField && <span className="ml-2 text-xs text-primary">(Ajustado)</span>}
+                            </TableCell>
+                            <TableCell className="text-right">{adj.percentage.toFixed(2)}%</TableCell>
+                            <TableCell className="text-right">
+                              ${adj.amount.toLocaleString("es-ES", { minimumFractionDigits: 2 })}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })
+                      .filter(Boolean)}
                   </TableBody>
                 </Table>
               </div>
