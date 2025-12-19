@@ -198,7 +198,7 @@ export const VendorAdjustment = ({
         empresa: mp.empresa,
         presupuesto: mp.presupuesto,
         fecha_destino: mp.fechaDestino,
-        vendor_adjustments: adjustments,
+        vendor_adjustments: adjustments as any, // Convertir a Json para Supabase
         role: (userRole as "administrador" | "gerente" | "admin_ventas") || "administrador",
       }));
 
@@ -297,7 +297,7 @@ export const VendorAdjustment = ({
                   </div>
 
                   <div className="col-span-1 text-center">
-                    {adj.fixedField && <Lock className="h-4 w-4 text-primary mx-auto" title="Campo fijo" />}
+                    {adj.fixedField && <Lock className="h-4 w-4 text-primary mx-auto" />}
                   </div>
                 </div>
               );
