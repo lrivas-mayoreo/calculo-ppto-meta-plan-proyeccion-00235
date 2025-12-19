@@ -1,12 +1,6 @@
 import { Card } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { CalculationResult } from "@/pages/Index";
 import { useState } from "react";
 import { BudgetKPICards } from "./BudgetKPICards";
@@ -28,72 +22,40 @@ export const BudgetResults = ({ result }: BudgetResultsProps) => {
 
   // Obtener valores únicos para los filtros
   const vendedoresUnicos = Array.from(
-    new Set(
-      result.resultadosMarcas.flatMap((m) =>
-        m.distribucionClientes.map((c) => c.vendedor)
-      )
-    )
+    new Set(result.resultadosMarcas.flatMap((m) => m.distribucionClientes.map((c) => c.vendedor))),
   );
 
   const clientesUnicos = Array.from(
-    new Set(
-      result.resultadosMarcas.flatMap((m) =>
-        m.distribucionClientes.map((c) => c.cliente)
-      )
-    )
+    new Set(result.resultadosMarcas.flatMap((m) => m.distribucionClientes.map((c) => c.cliente))),
   );
 
-  const marcasUnicas = Array.from(
-    new Set(result.resultadosMarcas.map((m) => m.marca))
-  );
+  const marcasUnicas = Array.from(new Set(result.resultadosMarcas.map((m) => m.marca)));
 
-  const fechasUnicas = Array.from(
-    new Set(result.resultadosMarcas.map((m) => m.fechaDestino))
-  );
+  const fechasUnicas = Array.from(new Set(result.resultadosMarcas.map((m) => m.fechaDestino)));
 
-  const empresasUnicas = Array.from(
-    new Set(result.resultadosMarcas.map((m) => m.empresa))
-  );
+  const empresasUnicas = Array.from(new Set(result.resultadosMarcas.map((m) => m.empresa)));
 
   const articulosUnicos = Array.from(
     new Set(
-      result.resultadosMarcas.flatMap((m) =>
-        m.distribucionClientes.flatMap((c) =>
-          c.articulos.map((a) => a.articulo)
-        )
-      )
-    )
+      result.resultadosMarcas.flatMap((m) => m.distribucionClientes.flatMap((c) => c.articulos.map((a) => a.articulo))),
+    ),
   );
 
   // Aplicar filtros
   const resultadosFiltrados = result.resultadosMarcas
     .filter((marca) => filtroMarca === "all" || marca.marca === filtroMarca)
-    .filter(
-      (marca) => filtroFecha === "all" || marca.fechaDestino === filtroFecha
-    )
-    .filter(
-      (marca) => filtroEmpresa === "all" || marca.empresa === filtroEmpresa
-    )
+    .filter((marca) => filtroFecha === "all" || marca.fechaDestino === filtroFecha)
+    .filter((marca) => filtroEmpresa === "all" || marca.empresa === filtroEmpresa)
     .map((marca) => ({
       ...marca,
       distribucionClientes: marca.distribucionClientes
-        .filter(
-          (cliente) =>
-            filtroVendedor === "all" || cliente.vendedor === filtroVendedor
-        )
-        .filter(
-          (cliente) =>
-            filtroCliente === "all" || cliente.cliente === filtroCliente
-        )
-        .filter(
-          (cliente) =>
-            filtroEmpresa === "all" || cliente.empresa === filtroEmpresa
-        )
+        .filter((cliente) => filtroVendedor === "all" || cliente.vendedor === filtroVendedor)
+        .filter((cliente) => filtroCliente === "all" || cliente.cliente === filtroCliente)
+        .filter((cliente) => filtroEmpresa === "all" || cliente.empresa === filtroEmpresa)
         .map((cliente) => ({
           ...cliente,
           articulos: cliente.articulos.filter(
-            (articulo) =>
-              filtroArticulo === "all" || articulo.articulo === filtroArticulo
+            (articulo) => filtroArticulo === "all" || articulo.articulo === filtroArticulo,
           ),
         }))
         .filter((cliente) => cliente.articulos.length > 0),
@@ -108,6 +70,8 @@ export const BudgetResults = ({ result }: BudgetResultsProps) => {
       <BudgetKPICards
         resultadosFiltrados={resultadosFiltrados}
         totalPresupuesto={totalPresupuesto}
+        vendedorFiltrado={filtroVendedor !== "todos" ? filtroVendedor : null}
+        totalPresupuestoGeneral={result.totalPresupuesto}
       />
 
       {/* Filtros */}
@@ -219,10 +183,7 @@ export const BudgetResults = ({ result }: BudgetResultsProps) => {
       </Card>
 
       {/* Tabla Acordeón */}
-      <BudgetAccordionTable
-        resultadosFiltrados={resultadosFiltrados}
-        totalPresupuesto={totalPresupuesto}
-      />
+      <BudgetAccordionTable resultadosFiltrados={resultadosFiltrados} totalPresupuesto={totalPresupuesto} />
     </div>
   );
 };

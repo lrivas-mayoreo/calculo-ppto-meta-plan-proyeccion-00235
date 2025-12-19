@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Calculator, Upload, X, Download, Eye, Info, Settings, Check, AlertTriangle } from "lucide-react";
+import { Calculator, Upload, X, Download, Eye, Info, Settings, Check, AlertTriangle, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
 import type { MarcaPresupuesto } from "@/pages/Index";
@@ -290,7 +290,7 @@ export const BudgetForm = ({
               presupuesto,
               error: `Marca "${marca}" no existe en el maestro`,
               tipoError: "marca_invalida",
-              sugerencia: `Verifique que la marca esté registrada. Ejemplo: ${mockData.marcas[0] || "N/A"}`,
+              sugerencia: `Verifique que la marca esté registrada.Ejemplo: ${mockData.marcas[0] || "N/A"} `,
             });
             return;
           }
@@ -307,7 +307,7 @@ export const BudgetForm = ({
               presupuesto,
               error: `Empresa "${empresa}" no existe en el sistema`,
               tipoError: "empresa_invalida",
-              sugerencia: `Empresas válidas: ${mockData.empresas.join(", ")}`,
+              sugerencia: `Empresas válidas: ${mockData.empresas.join(", ")} `,
             });
             return;
           }
@@ -356,11 +356,11 @@ export const BudgetForm = ({
 
         if (errores.length > 0) {
           toast.warning(
-            `Archivo cargado con ${marcasFromExcel.length} marca(s) válida(s) y ${errores.length} error(es). Haga clic en el icono ⚠️ para ver detalles.`,
+            `Archivo cargado con ${marcasFromExcel.length} marca(s) válida(s) y ${errores.length} error(es).Haga clic en el icono ⚠️ para ver detalles.`,
           );
           setShowErrorDialog(true);
         } else {
-          toast.success(`${marcasFromExcel.length} marcas cargadas (Formato: ${detectedFormat})`);
+          toast.success(`${marcasFromExcel.length} marcas cargadas(Formato: ${detectedFormat})`);
         }
       } catch (error) {
         toast.error("Error al procesar el archivo Excel");
@@ -485,16 +485,40 @@ export const BudgetForm = ({
                 )}
               </div>
               {marcasConError.length > 0 && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setShowErrorDialog(true)}
-                  className="h-8 w-8"
-                  title="Ver errores detallados"
-                >
-                  <AlertTriangle className="h-4 w-4 text-destructive" />
-                </Button>
+                <div className="mt-4 rounded-lg border border-destructive/50 bg-destructive/10 p-4">
+                  <div className="flex items-start gap-3">
+                    <AlertCircle className="h-5 w-5 text-destructive flex-shrink-0 mt-0.5" />
+                    <div className="flex-1 space-y-2">
+                      <p className="text-sm font-medium text-destructive">
+                        {marcasConError.length} marca{marcasConError.length !== 1 ? "s" : ""} con error
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        Las siguientes marcas no tienen historial de ventas en los meses seleccionados:
+                      </p>
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        {marcasConError.slice(0, 5).map((error, idx) => (
+                          <Badge key={idx} variant="destructive" className="text-xs">
+                            {error.marca}
+                          </Badge>
+                        ))}
+                        {marcasConError.length > 5 && (
+                          <Badge variant="outline" className="text-xs">
+                            +{marcasConError.length - 5} más
+                          </Badge>
+                        )}
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setShowErrorDialog(true)}
+                        className="mt-2"
+                      >
+                        Ver detalles completos
+                      </Button>
+                    </div>
+                  </div>
+                </div>
               )}
               <Button
                 type="button"
