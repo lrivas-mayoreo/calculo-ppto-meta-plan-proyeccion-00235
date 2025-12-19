@@ -669,8 +669,8 @@ export const BudgetForm = ({
         Calcular Presupuesto
       </Button>
 
-      {/* Sección de Ajustes Configurables */}
-      {(Object.keys(vendorAdjustments).length > 0 || Object.keys(brandAdjustments).length > 0) && (
+      {/* Sección de Ajustes Configurables - Ahora se muestra solo en el diálogo */}
+      {false && (Object.keys(vendorAdjustments).length > 0 || Object.keys(brandAdjustments).length > 0) && (
         <div className="mt-6 space-y-4 rounded-lg border border-border bg-muted/30 p-4">
           <div className="flex items-center gap-2">
             <Settings className="h-5 w-5 text-primary" />

@@ -161,11 +161,42 @@ const Index = () => {
       monto: number;
     }>
   >([]);
+
+  // Estados para guardar el resultado base y parámetros del cálculo
+  const [baseResult, setBaseResult] = useState<CalculationResult | null>(null);
+  const [lastCalculationParams, setLastCalculationParams] = useState<{
+    ventasTransformadas: Array<{
+      mesAnio: string;
+      marca: string;
+      cliente: string;
+      articulo: string;
+      vendedor: string;
+      empresa: string;
+      venta: number;
+    }>;
+    mesesReferencia: string[];
+  } | null>(null);
   useEffect(() => {
     if (!authLoading && !session) {
       navigate("/auth");
     }
   }, [authLoading, session, navigate]);
+
+  // useEffect para recalcular cuando cambien los ajustes de vendedor
+  useEffect(() => {
+    if (baseResult && lastCalculationParams && Object.keys(vendorAdjustments).length > 0) {
+      console.log("🔄 Recalculando por cambio en vendorAdjustments...");
+
+      const resultadoConAjustes = applyVendorAdjustmentsToResult(
+        baseResult,
+        vendorAdjustments,
+        lastCalculationParams.ventasTransformadas,
+        lastCalculationParams.mesesReferencia,
+      );
+
+      setResult(resultadoConAjustes);
+    }
+  }, [vendorAdjustments]);
 
   useEffect(() => {
     if (!user?.id) {
@@ -369,6 +400,136 @@ const Index = () => {
     });
 
     return distribucion;
+  };
+
+  // Función para aplicar ajustes de vendedor al resultado calculado
+  const applyVendorAdjustmentsToResult = (
+    result: CalculationResult,
+    vendorAdjustments: Record<
+      string,
+      {
+        amount: number;
+        percentage: number;
+        fixedField: "amount" | "percentage" | null;
+      }
+    >,
+    ventasTransformadas: Array<{
+      mesAnio: string;
+      marca: string;
+      cliente: string;
+      articulo: string;
+      vendedor: string;
+      empresa: string;
+      venta: number;
+    }>,
+    mesesReferencia: string[],
+  ): CalculationResult => {
+    // Si no hay ajustes, retornar resultado sin cambios
+    if (Object.keys(vendorAdjustments).length === 0) {
+      return result;
+    }
+
+    console.log("🔧 Aplicando ajustes de vendedor...", vendorAdjustments);
+
+    // Crear copia profunda del resultado para no mutar el original
+    const resultadoAjustado: CalculationResult = {
+      ...result,
+      resultadosMarcas: result.resultadosMarcas.map((marca) => ({
+        ...marca,
+        distribucionClientes: [...marca.distribucionClientes],
+      })),
+    };
+
+    // Para cada vendedor con ajuste
+    Object.entries(vendorAdjustments).forEach(([vendedor, ajuste]) => {
+      console.log(`📊 Procesando ajuste para vendedor: ${vendedor}, monto: $${ajuste.amount}`);
+
+      // 1. Recolectar todos los clientes de este vendedor a través de todas las marcas
+      const clientesDelVendedor: Array<{
+        marcaIndex: number;
+        clienteIndex: number;
+        cliente: string;
+        presupuestoActual: number;
+        ventasHistoricas: number;
+      }> = [];
+
+      resultadoAjustado.resultadosMarcas.forEach((marca, marcaIndex) => {
+        marca.distribucionClientes.forEach((cliente, clienteIndex) => {
+          if (cliente.vendedor === vendedor) {
+            // Calcular ventas históricas de este cliente
+            const ventasCliente = ventasTransformadas
+              .filter(
+                (v) =>
+                  v.vendedor === vendedor &&
+                  v.cliente === cliente.cliente &&
+                  v.marca === marca.marca &&
+                  mesesReferencia.includes(v.mesAnio),
+              )
+              .reduce((sum, v) => sum + v.venta, 0);
+
+            clientesDelVendedor.push({
+              marcaIndex,
+              clienteIndex,
+              cliente: cliente.cliente,
+              presupuestoActual: cliente.subtotal,
+              ventasHistoricas: ventasCliente,
+            });
+          }
+        });
+      });
+
+      if (clientesDelVendedor.length === 0) {
+        console.warn(`⚠️ No se encontraron clientes para el vendedor: ${vendedor}`);
+        return;
+      }
+
+      // 2. Calcular total de ventas históricas del vendedor
+      const totalVentasVendedor = clientesDelVendedor.reduce((sum, c) => sum + c.ventasHistoricas, 0);
+
+      if (totalVentasVendedor === 0) {
+        console.warn(`⚠️ El vendedor ${vendedor} no tiene ventas históricas`);
+        return;
+      }
+
+      // 3. Redistribuir el presupuesto ajustado proporcionalmente
+      clientesDelVendedor.forEach((clienteInfo) => {
+        const porcentajeCliente = clienteInfo.ventasHistoricas / totalVentasVendedor;
+        const nuevoPresupuesto = ajuste.amount * porcentajeCliente;
+
+        console.log(
+          `  → Cliente: ${clienteInfo.cliente}, % histórico: ${(porcentajeCliente * 100).toFixed(2)}%, nuevo presupuesto: $${nuevoPresupuesto.toFixed(2)}`,
+        );
+
+        // Actualizar el subtotal del cliente en el resultado
+        const marca = resultadoAjustado.resultadosMarcas[clienteInfo.marcaIndex];
+        const cliente = marca.distribucionClientes[clienteInfo.clienteIndex];
+
+        // Actualizar subtotal
+        cliente.subtotal = nuevoPresupuesto;
+
+        // Actualizar también los artículos proporcionalmente
+        const factorAjuste = nuevoPresupuesto / clienteInfo.presupuestoActual;
+        cliente.articulos = cliente.articulos.map((art) => ({
+          ...art,
+          ventaAjustada: art.ventaAjustada * factorAjuste,
+          variacion: art.ventaAjustada * factorAjuste - art.ventaReal,
+        }));
+      });
+
+      console.log(`✅ Ajuste aplicado para vendedor: ${vendedor}`);
+    });
+
+    // Recalcular totales
+    const nuevoTotalPresupuesto = resultadoAjustado.resultadosMarcas.reduce(
+      (sum, marca) => sum + marca.distribucionClientes.reduce((s, c) => s + c.subtotal, 0),
+      0,
+    );
+
+    resultadoAjustado.totalPresupuesto = nuevoTotalPresupuesto;
+
+    console.log(`💰 Nuevo total presupuesto después de ajustes: $${nuevoTotalPresupuesto.toFixed(2)}`);
+
+    return resultadoAjustado;
   };
   const handleCalculate = (marcasPresupuesto: MarcaPresupuesto[], mesesReferencia: string[]) => {
     console.log("🎯 Iniciando cálculo con:", {
@@ -635,7 +796,16 @@ const Index = () => {
           )}`
         : "No se calcularon marcas";
     toast.info(promedioMensaje);
-    setResult(resultadoFinal);
+
+    // Aplicar ajustes de vendedor si existen
+    const resultadoConAjustes = applyVendorAdjustmentsToResult(
+      resultadoFinal,
+      vendorAdjustments,
+      ventasTransformadas,
+      mesesReferencia,
+    );
+
+    setResult(resultadoConAjustes);
   };
   if (!session || !user) {
     return null;
