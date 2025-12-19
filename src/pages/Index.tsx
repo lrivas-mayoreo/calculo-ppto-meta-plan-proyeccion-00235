@@ -650,7 +650,7 @@ const Index = () => {
     const clientesMap = new Map(clientes.map((c) => [c.codigo, c.nombre]));
     const vendedoresMap = new Map(vendedores.map((v) => [v.codigo, v.nombre]));
 
-    // Transform ventas to have mesAnio in correct format
+    // Transform ventas to have mesAnio in correct format and full structure
     const ventasTransformadas = ventas.map((v) => {
       let mesAnio = v.mes;
 
@@ -668,9 +668,23 @@ const Index = () => {
         mesAnio = `${mes}-${year}`;
       }
 
+      // Get readable names from codes
+      const marcaNombre = marcasMap.get(v.codigo_marca) || v.codigo_marca;
+      const clienteNombre = clientesMap.get(v.codigo_cliente) || v.codigo_cliente;
+      const vendedorNombre = v.codigo_vendedor 
+        ? (vendedoresMap.get(v.codigo_vendedor) || v.codigo_vendedor)
+        : "Sin vendedor";
+
       return {
         ...v,
         mesAnio,
+        // Add transformed properties for applyVendorAdjustmentsToResult
+        marca: marcaNombre,
+        cliente: clienteNombre,
+        vendedor: vendedorNombre,
+        articulo: marcaNombre, // Using marca as articulo for now
+        empresa: "Empresa Alpha",
+        venta: v.monto,
       };
     });
 
@@ -898,11 +912,34 @@ const Index = () => {
         : "No se calcularon marcas";
     toast.info(promedioMensaje);
 
+    // Guardar resultado base y parámetros para futuros ajustes de vendedor
+    setBaseResult(resultadoFinal);
+    setLastCalculationParams({
+      ventasTransformadas: ventasTransformadas.map((v) => ({
+        mesAnio: v.mesAnio,
+        marca: v.marca,
+        cliente: v.cliente,
+        articulo: v.articulo,
+        vendedor: v.vendedor,
+        empresa: v.empresa,
+        venta: v.venta,
+      })),
+      mesesReferencia,
+    });
+
     // Aplicar ajustes de vendedor si existen
     const resultadoConAjustes = applyVendorAdjustmentsToResult(
       resultadoFinal,
       vendorAdjustments,
-      ventasTransformadas,
+      ventasTransformadas.map((v) => ({
+        mesAnio: v.mesAnio,
+        marca: v.marca,
+        cliente: v.cliente,
+        articulo: v.articulo,
+        vendedor: v.vendedor,
+        empresa: v.empresa,
+        venta: v.venta,
+      })),
       mesesReferencia,
     );
 
