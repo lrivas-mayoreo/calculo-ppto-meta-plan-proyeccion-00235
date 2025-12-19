@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Loader2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -42,6 +43,7 @@ export const VendorAdjustment = ({
   result,
 }: VendorAdjustmentProps) => {
   const [open, setOpen] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [adjustments, setAdjustments] = useState<Record<string, VendorAdjustment>>({});
   const [fixedVendors, setFixedVendors] = useState<Set<string>>(new Set());
 
@@ -178,20 +180,10 @@ export const VendorAdjustment = ({
       return;
     }
 
-    const changedVendors = Object.entries(adjustments).filter(([v, adj]) => adj.fixedField !== null);
+    setIsSaving(true);
 
-    if (changedVendors.length > 0) {
-      const message = changedVendors
-        .map(
-          ([v, adj]) =>
-            `${v} ($${adj.amount.toLocaleString("es-ES", { minimumFractionDigits: 2 })} / ${adj.percentage.toFixed(2)}%)`,
-        )
-        .join(", ");
-      toast.success(`Ajuste aplicado: ${message}`);
-    }
-
-    // Save adjustments to database
     try {
+      // Save adjustments to database
       const updates = marcasPresupuesto.map((mp) => ({
         user_id: userId,
         marca: mp.marca,
@@ -210,14 +202,29 @@ export const VendorAdjustment = ({
       const { error } = await supabase.from("budgets").insert(updates);
 
       if (error) throw error;
-      toast.success("Ajustes guardados en la base de datos");
+      
+      const changedVendors = Object.entries(adjustments).filter(([v, adj]) => adj.fixedField !== null);
+      if (changedVendors.length > 0) {
+        const message = changedVendors
+          .map(
+            ([v, adj]) =>
+              `${v} ($${adj.amount.toLocaleString("es-ES", { minimumFractionDigits: 2 })} / ${adj.percentage.toFixed(2)}%)`,
+          )
+          .join(", ");
+        toast.success(`Ajustes aplicados y guardados: ${message}`);
+      } else {
+        toast.success("Ajustes guardados correctamente");
+      }
+      
+      // Apply adjustments to recalculate the result
+      onAdjust(adjustments);
+      setOpen(false);
     } catch (error) {
       console.error("Error saving vendor adjustments:", error);
       toast.error("Error al guardar ajustes");
+    } finally {
+      setIsSaving(false);
     }
-
-    onAdjust(adjustments);
-    setOpen(false);
   };
 
   const totalAmount = Object.values(adjustments).reduce((sum, adj) => sum + adj.amount, 0);
@@ -334,11 +341,18 @@ export const VendorAdjustment = ({
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => setOpen(false)}>
+          <Button variant="outline" onClick={() => setOpen(false)} disabled={isSaving}>
             Cancelar
           </Button>
-          <Button onClick={handleApply} disabled={!isValid}>
-            Aplicar Ajustes
+          <Button onClick={handleApply} disabled={!isValid || isSaving}>
+            {isSaving ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Actualizando presupuesto...
+              </>
+            ) : (
+              "Aplicar Ajustes"
+            )}
           </Button>
         </DialogFooter>
       </DialogContent>
