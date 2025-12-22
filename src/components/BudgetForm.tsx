@@ -1,9 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Calculator, Upload, X, Download, Eye, Info, Settings, Check, AlertTriangle, AlertCircle } from "lucide-react";
+import { Calculator, Upload, X, Download, Eye, Info, Settings, Check, AlertTriangle, AlertCircle, Sparkles, FileSpreadsheet } from "lucide-react";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
 import type { MarcaPresupuesto } from "@/pages/Index";
@@ -11,9 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible";
 import { Badge } from "@/components/ui/badge";
 import { parseDateFromExcel, formatDateToYYYYMMDD, detectDateFormat } from "@/lib/dateUtils";
-import { SuggestedBudget } from "@/components/SuggestedBudget";
 import { ExcelErrorDialog } from "@/components/ExcelErrorDialog";
-
 interface BudgetFormProps {
   onCalculate: (marcasPresupuesto: MarcaPresupuesto[], mesesReferencia: string[]) => void;
   mockData: {
@@ -79,6 +77,10 @@ export const BudgetForm = ({
   const [showMarcasError, setShowMarcasError] = useState(false);
   const [showErrorDialog, setShowErrorDialog] = useState(false);
   const [dateFormatPreview, setDateFormatPreview] = useState<string>("");
+  
+  // Estados para Presupuesto Sugerido inline
+  const [useSuggestedBudget, setUseSuggestedBudget] = useState(false);
+  const [suggestedTotalBudget, setSuggestedTotalBudget] = useState<string>("");
 
   // Calculate meses referencia from start/end selection
   useEffect(() => {
@@ -393,22 +395,19 @@ export const BudgetForm = ({
   };
 
   const handleDownloadTemplate = () => {
-    // Crear array con las marcas disponibles y columnas de Fecha, Empresa y Presupuesto con ejemplos
-    const templateData = mockData.marcas.map((marca, index) => ({
-      Marca: marca,
-      Fecha: index === 0 ? "2025/12/31" : "",
-      Empresa: index === 0 ? mockData.empresas[0] : "",
-      Presupuesto: index === 0 ? "100000" : "",
-    }));
+    // Descargar la plantilla desde el archivo estático
+    const link = document.createElement('a');
+    link.href = '/templates/Plantilla_Marcas_Presupuesto.xlsx';
+    link.download = 'Plantilla_Marcas_Presupuesto.xlsx';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast.success("Plantilla Excel descargada correctamente");
+  };
 
-    // Crear libro de Excel
-    const worksheet = XLSX.utils.json_to_sheet(templateData);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Marcas");
-
-    // Descargar archivo
-    XLSX.writeFile(workbook, "Template_Marcas_Presupuesto.xlsx");
-    toast.success("Template Excel descargado correctamente");
+  const handleUploadClick = () => {
+    const fileInput = document.getElementById("excel-upload") as HTMLInputElement;
+    if (fileInput) fileInput.click();
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -419,8 +418,80 @@ export const BudgetForm = ({
       return;
     }
 
+    // Si se usa presupuesto sugerido, calcular la distribución automática
+    if (useSuggestedBudget) {
+      const budget = parseFloat(suggestedTotalBudget);
+      if (!budget || budget <= 0) {
+        toast.error("Ingrese un monto de presupuesto válido");
+        return;
+      }
+
+      // Calcular distribución basada en historial de ventas
+      const ventasMesesSeleccionados = ventasData.filter((v) => mesesReferencia.includes(v.mesAnio));
+      
+      if (ventasMesesSeleccionados.length === 0) {
+        toast.error("No hay datos de ventas en los meses seleccionados");
+        return;
+      }
+
+      // Agrupar ventas por marca y empresa
+      const brandEmpresaData = new Map<string, { empresa: string; totalVentas: number }>();
+      
+      ventasMesesSeleccionados.forEach((venta) => {
+        const key = `${venta.marca}|${venta.empresa}`;
+        const current = brandEmpresaData.get(key);
+        if (current) {
+          current.totalVentas += venta.venta;
+        } else {
+          brandEmpresaData.set(key, { empresa: venta.empresa, totalVentas: venta.venta });
+        }
+      });
+
+      const validBrands = Array.from(brandEmpresaData.entries())
+        .filter(([, data]) => data.totalVentas > 0)
+        .map(([key, data]) => {
+          const [marca] = key.split("|");
+          return { marca, empresa: data.empresa, total: data.totalVentas };
+        });
+
+      if (validBrands.length === 0) {
+        toast.error("No hay marcas con ventas en los meses seleccionados");
+        return;
+      }
+
+      const totalHistorical = validBrands.reduce((sum, item) => sum + item.total, 0);
+
+      // Obtener fecha destino (primer día del mes siguiente)
+      const today = new Date();
+      const nextMonth = new Date(today.getFullYear(), today.getMonth() + 1, 1);
+      const targetDate = `${nextMonth.getFullYear()}-${String(nextMonth.getMonth() + 1).padStart(2, '0')}-01`;
+
+      const calculatedMarcas: MarcaPresupuesto[] = validBrands.map((item) => {
+        const porcentaje = item.total / totalHistorical;
+        const monto = budget * porcentaje;
+        return {
+          marca: item.marca,
+          fechaDestino: targetDate,
+          empresa: item.empresa,
+          presupuesto: monto,
+        };
+      });
+
+      setMarcasPresupuesto(calculatedMarcas);
+      onMarcasPresupuestoLoad(calculatedMarcas);
+
+      try {
+        onCalculate(calculatedMarcas, mesesReferencia);
+        toast.success(`Presupuesto distribuido automáticamente entre ${calculatedMarcas.length} marca(s)`);
+      } catch (error) {
+        toast.error((error as Error).message);
+      }
+      return;
+    }
+
+    // Flujo normal con archivo Excel
     if (marcasPresupuesto.length === 0) {
-      toast.error("Por favor cargue un archivo Excel con marcas, fechas, empresas y presupuestos");
+      toast.error("Por favor cargue un archivo Excel o ingrese un presupuesto sugerido");
       return;
     }
 
@@ -434,43 +505,128 @@ export const BudgetForm = ({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
-      <div>
-        <h2 className="mb-4 text-lg font-semibold text-foreground">Parámetros de Cálculo</h2>
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-semibold text-foreground">Parámetros de Cálculo</h2>
+        <Button type="button" variant="outline" size="sm" onClick={handleDownloadTemplate}>
+          <Download className="mr-2 h-4 w-4" />
+          Descargar Plantilla
+        </Button>
       </div>
 
-      <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <Label htmlFor="excel-upload">Cargar Excel con Marcas y Presupuestos *</Label>
-          <div className="flex gap-2">
-            <SuggestedBudget
-              historicalData={historicalBudgets}
-              marcasDisponibles={mockData.marcas}
-              empresasDisponibles={mockData.empresas}
-              mesesDisponibles={mesesDisponibles}
-              ventasData={ventasData}
-              onApplySuggestion={(marcas, mesesReferencia) => {
-                console.log("🎯 Aplicando presupuesto sugerido:", {
-                  marcasCount: marcas.length,
-                  mesesReferenciaCount: mesesReferencia.length,
-                });
-                setMarcasPresupuesto(marcas);
-                setMesesReferencia(mesesReferencia);
-                onMarcasPresupuestoLoad(marcas);
-                // Automatically trigger calculation with the suggested budget
-                setTimeout(() => {
-                  console.log("🔄 Iniciando cálculo automático de distribución...");
-                  onCalculate(marcas, mesesReferencia);
-                  toast.success("Distribución calculada automáticamente por marca, vendedor, cliente y artículo");
-                }, 100);
+      <div className="space-y-3">
+        <Label>Cargar Presupuestos *</Label>
+        
+        {/* Opciones lado a lado: Subir archivo y Presupuesto Sugerido */}
+        <div className="grid grid-cols-2 gap-3">
+          {/* Opción 1: Subir archivo Excel */}
+          <div 
+            className={`flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed p-4 cursor-pointer transition-colors ${
+              !useSuggestedBudget && excelFileName 
+                ? "border-primary bg-primary/5" 
+                : !useSuggestedBudget 
+                  ? "border-border hover:border-primary/50 hover:bg-muted/50" 
+                  : "border-border bg-muted/30 opacity-50"
+            }`}
+            onClick={() => {
+              if (!useSuggestedBudget) handleUploadClick();
+            }}
+          >
+            <FileSpreadsheet className="h-8 w-8 text-muted-foreground" />
+            <span className="text-sm font-medium text-center">Subir Archivo Excel</span>
+            {excelFileName && !useSuggestedBudget && (
+              <div className="flex items-center gap-2 mt-1">
+                <Badge variant="secondary" className="text-xs">
+                  {excelFileName}
+                </Badge>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-5 w-5"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleRemoveExcel();
+                  }}
+                >
+                  <X className="h-3 w-3" />
+                </Button>
+              </div>
+            )}
+            <Input
+              id="excel-upload"
+              type="file"
+              accept=".xlsx,.xls"
+              onChange={(e) => {
+                setUseSuggestedBudget(false);
+                setSuggestedTotalBudget("");
+                handleExcelUpload(e);
               }}
+              className="hidden"
             />
-            <Button type="button" variant="outline" size="sm" onClick={handleDownloadTemplate}>
-              <Download className="mr-2 h-4 w-4" />
-              Descargar Template
+            <Button 
+              type="button" 
+              variant="outline" 
+              size="sm" 
+              className="mt-1"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (!useSuggestedBudget) handleUploadClick();
+              }}
+            >
+              <Upload className="mr-2 h-4 w-4" />
+              Cargar
             </Button>
           </div>
+
+          {/* Opción 2: Presupuesto Sugerido */}
+          <div 
+            className={`flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed p-4 cursor-pointer transition-colors ${
+              useSuggestedBudget 
+                ? "border-primary bg-primary/5" 
+                : "border-border hover:border-primary/50 hover:bg-muted/50"
+            }`}
+            onClick={() => {
+              setUseSuggestedBudget(true);
+              // Limpiar archivo Excel si se selecciona presupuesto sugerido
+              if (excelFileName) {
+                handleRemoveExcel();
+              }
+            }}
+          >
+            <Sparkles className="h-8 w-8 text-muted-foreground" />
+            <span className="text-sm font-medium text-center">Presupuesto Sugerido</span>
+            {useSuggestedBudget && (
+              <div className="w-full mt-1 space-y-2">
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="number"
+                    placeholder="Monto máximo"
+                    value={suggestedTotalBudget}
+                    onChange={(e) => setSuggestedTotalBudget(e.target.value)}
+                    onClick={(e) => e.stopPropagation()}
+                    className="text-sm"
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 flex-shrink-0"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setUseSuggestedBudget(false);
+                      setSuggestedTotalBudget("");
+                    }}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
-        {excelFileName ? (
+
+        {/* Detalles del archivo cargado */}
+        {excelFileName && !useSuggestedBudget && (
           <div className="space-y-2">
             <div className="flex items-center gap-2 rounded-md border border-border bg-muted/50 p-3">
               <div className="flex-1 truncate text-sm">
@@ -604,22 +760,13 @@ export const BudgetForm = ({
               </CollapsibleContent>
             </Collapsible>
           </div>
-        ) : (
-          <div className="flex gap-2">
-            <Input
-              id="excel-upload"
-              type="file"
-              accept=".xlsx,.xls"
-              onChange={handleExcelUpload}
-              className="cursor-pointer"
-            />
-            <Button type="button" variant="outline" size="icon">
-              <Upload className="h-4 w-4" />
-            </Button>
-          </div>
         )}
+
         <p className="text-xs text-muted-foreground">
-          Formato: Columnas "Marca", "Fecha" (DD/MM/YYYY o YYYY/MM/DD), "Empresa" y "Presupuesto"
+          {useSuggestedBudget 
+            ? "El presupuesto se distribuirá automáticamente basándose en el historial de ventas"
+            : "Formato Excel: Columnas \"Marca\", \"Fecha\" (DD/MM/YYYY o YYYY/MM/DD), \"Empresa\" y \"Presupuesto\""
+          }
         </p>
       </div>
 

@@ -9,7 +9,7 @@ import { VendorAdjustment } from "@/components/VendorAdjustment";
 import { VendorClientTable } from "@/components/VendorClientTable";
 import { RoleManagement } from "@/components/RoleManagement";
 import { FormulaExplanation } from "@/components/FormulaExplanation";
-import { SuggestedBudget } from "@/components/SuggestedBudget";
+
 import { DataImport } from "@/components/DataImport";
 import { CSVImport } from "@/components/CSVImport";
 import { VendorBudgetView } from "@/components/VendorBudgetView";
